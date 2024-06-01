@@ -1,0 +1,22 @@
+{
+	"authors": [
+		"maly jacob"
+	],
+	"copyright": "Copyright © 2024, maly jacob",
+	"dependencies": {
+		"mir-core": "~>1.7.1"
+	},
+	"description": "A cmd line tool library",
+	"license": "MIT",
+	"name": "cmdline",
+	"version": "0.0.1",
+	"targetName": "cmdline",
+	"targetPath": "build",
+	"targetType": "library",
+	"importPaths": [
+		"source"
+	],
+	"sourcePaths": [
+		"source"
+	]
+}
