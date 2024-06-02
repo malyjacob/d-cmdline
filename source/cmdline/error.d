@@ -7,7 +7,7 @@ class CMDLineError : Error {
     string code;
     ubyte exitCode;
 
-    this(string msg, ubyte exitCode = 1, string code = "", Throwable nextInChain = null) pure nothrow @nogc @safe {
+    this(string msg = "", ubyte exitCode = 1, string code = "", Throwable nextInChain = null) pure nothrow @nogc @safe {
         super(msg, nextInChain);
         this.exitCode = exitCode;
         this.code = code;
