@@ -14,6 +14,7 @@ import std.array;
 import mir.algebraic;
 
 import cmdline.error;
+import cmdline.pattern;
 
 private struct OptionFlags {
     string shortFlag = "";
@@ -22,7 +23,7 @@ private struct OptionFlags {
 }
 
 alias OptionBaseValue = AliasSeq!(string, int, double, bool);
-alias OptionArrayValue = AliasSeq!(string[], int[], double[], bool[]);
+alias OptionArrayValue = AliasSeq!(string[], int[], double[]);
 alias OptionValueSeq = AliasSeq!(OptionBaseValue, OptionArrayValue);
 
 alias OptionNullable = Nullable!OptionValueSeq;
@@ -51,7 +52,8 @@ template isBaseOptionValueType(T) {
 
 template isOptionValueType(T) {
     static if (isDynamicArray!T && !allSameType!(T, string)) {
-        enum bool isOptionValueType = isBaseOptionValueType!(ElementType!T);
+        enum bool isOptionValueType = !is(ElementType!T == bool) && isBaseOptionValueType!(
+                ElementType!T);
     }
     else {
         enum bool isOptionValueType = isBaseOptionValueType!T;
@@ -71,7 +73,6 @@ unittest {
 
     static assert(isOptionValueType!(int[]));
     static assert(isOptionValueType!(double[]));
-    static assert(isOptionValueType!(bool[]));
     static assert(isOptionValueType!(string[]));
 }
 
@@ -97,15 +98,13 @@ class Option {
     string envKey;
     ImplyOptionMap implyMap;
 
-    Nullable!(OptionValueSeq) implied;
-
     bool found;
     bool settled;
 
     Source source;
 
     alias Self = typeof(this);
-    alias ImplyOptionMap = Variant!(bool, string, string[])[string];
+    alias ImplyOptionMap = OptionVariant[string];
 
     this(string flags, string description) {
         this.description = description;
@@ -114,14 +113,13 @@ class Option {
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
-        this.variadic = opt.valueFlag == "" || opt.valueFlag[$ - 2] != '.' ? false : true;
+        this.variadic = (opt.valueFlag == "" || opt.valueFlag[$ - 2] != '.') ? false : true;
         this.valueName = opt.valueFlag == "" ? "" : this.variadic ? opt.valueFlag[1 .. $ - 4].idup
             : opt.valueFlag[1 .. $ - 1].idup;
         if (this.valueName == "") {
             this.required = this.optional = false;
         }
         else {
-
             this.required = opt.valueFlag[0] == '<' ? true : false;
             this.optional = opt.valueFlag[0] == '[' ? true : false;
         }
@@ -129,7 +127,6 @@ class Option {
         this.argChoices = [];
         this.conflictsWith = [];
         this.implyMap = null;
-        this.implied = null;
         this.envKey = "";
 
         this.found = false;
@@ -159,7 +156,7 @@ class Option {
         return this;
     }
 
-    Self implies(T)(const T[string] optionMap) if (is(T == bool) || is(T == string)) {
+    Self implies(T)(const T[string] optionMap) if (isOptionValueType!T) {
         assert(optionMap !is null);
         foreach (key, value; optionMap) {
             auto value_ptr = key in this.implyMap;
@@ -222,11 +219,6 @@ class Option {
         return raw;
     }
 
-    @property
-    T impliedVal(T)() const if (is(T == bool) || is(T == string) || is(T == string[])) {
-        return this.implied.get!T;
-    }
-
     bool isFlag(string flag) const {
         return this.shortFlag == flag || this.longFlag == flag;
     }
@@ -275,7 +267,7 @@ class Option {
     abstract bool isValid() const;
     @property
     abstract OptionVariant get() const;
-    abstract void initialize();
+    abstract Self initialize();
 
     Self defaultVal(T)(T value) if (isBaseOptionValueType!T) {
         static if (is(T == bool)) {
@@ -295,7 +287,7 @@ class Option {
 
     Self defaultVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return defaultVal(values[0], cast(T[])values[1..$]);
+        return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
 
     Self configVal(T)(T value) if (isBaseOptionValueType!T) {
@@ -316,7 +308,7 @@ class Option {
 
     Self configVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return configVal(values[0], cast(T[])values[1..$]);
+        return configVal(values[0], cast(T[]) values[1 .. $]);
     }
 
     Self implyVal(T)(T value) if (isBaseOptionValueType!T) {
@@ -335,9 +327,9 @@ class Option {
         return derived.implyVal(value, rest);
     }
 
-    Self implytVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
+    Self implyVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return implytVal(values[0], cast(T[])values[1..$]);
+        return implytVal(values[0], cast(T[]) values[1 .. $]);
     }
 
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
@@ -353,11 +345,80 @@ class Option {
 
     Self preset(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return preset(values[0], cast(T[])values[1..$]);
+        return preset(values[0], cast(T[]) values[1 .. $]);
     }
 
     T get(T)() const {
         return this.get.get!T;
+    }
+
+    Self parser(alias fn)() {
+        alias T = typeof({ string v; return fn(v); }());
+        static assert(isBaseOptionValueType!T && !is(T == bool));
+        Self result_this;
+        try {
+            auto derived = this.to!(ValueOption!T);
+            derived.parseFn = fn;
+            result_this = derived;
+        }
+        catch (ConvException e) {
+            auto derived = this.to!(VariadicOption!T);
+            derived.parseFn = fn;
+            result_this = derived;
+        }
+        return result_this;
+    }
+
+    Self processor(alias fn)() {
+        alias return_t = ReturnType!fn;
+        alias param_t = Parameters!fn;
+        static assert(param_t.length == 1 && is(return_t == param_t[0]));
+        static assert(isBaseOptionValueType!return_t && !is(return_t == bool));
+        alias T = return_t;
+        Self result_this;
+        try {
+            auto derived = this.to!(ValueOption!T);
+            derived.processFn = fn;
+            result_this = derived;
+        }
+        catch (ConvException e) {
+            auto derived = this.to!(VariadicOption!T);
+            derived.processFn = fn;
+            result_this = derived;
+        }
+        return result_this;
+    }
+
+    Self processReducer(alias fn)() {
+        alias return_t = ReturnType!fn;
+        alias param_t = Parameters!fn;
+        static assert(allSameType!(return_t, param_t) && param_t.length == 2);
+        alias T = return_t;
+        static assert(isBaseOptionValueType!T && !is(T == bool));
+        auto derived = this.to!(VariadicOption!T);
+        derived.processReduceFn = fn;
+        return derived;
+    }
+}
+
+Option createOption(T : bool)(string flags, string desc = "") {
+    auto opt = splitOptionFlags(flags);
+    bool is_bool = opt.valueFlag == "";
+    assert(is_bool);
+    return new BoolOption(flags, desc);
+}
+
+Option createOption(T)(string flags, string desc = "")
+        if (!is(T == bool) && isBaseOptionValueType!T) {
+    auto opt = splitOptionFlags(flags);
+    bool is_bool = opt.valueFlag == "";
+    bool is_variadic = (is_bool || opt.valueFlag[$ - 2] != '.') ? false : true;
+    assert(!is_bool);
+    if (is_variadic) {
+        return new VariadicOption!T(flags, desc);
+    }
+    else {
+        return new ValueOption!T(flags, desc);
     }
 }
 
@@ -373,17 +434,38 @@ unittest {
     auto opt_3 = opts[2];
 
     opt_1.defaultVal().implyVal(false);
-    opt_2.defaultVal().cliVal("123");
-    opt_3.defaultVal([123]).cliVal("12", "13", "14");
+    opt_2.defaultVal().parser!((string v) => v.to!(int)).cliVal("123");
+    opt_3.defaultVal([123]).parser!((string v) => v.to!(int))
+        .processor!((int a) => a + 1)
+        .cliVal("12", "13", "14");
 
     opt_1.initialize();
     opt_2.found = true;
     opt_2.initialize();
+    opt_3.found = true;
     opt_3.initialize();
 
     assert(opt_1.get!bool == false);
     assert(opt_2.get!int == 123);
-    assert(opt_3.get!(int[]) == [123]);
+    assert(opt_3.get!(int[]) == [13, 14, 15]);
+}
+
+unittest {
+    Option[] opts = [
+        createOption!bool("-m, --mixed").defaultVal.implyVal(false),
+        createOption!int("-m, --mixed [dig]", "")
+            .defaultVal.parser!((string v) => v.to!(int)).cliVal("123"),
+        createOption!int("-m, --mixed <dig...>", "").defaultVal([123])
+            .parser!((string v) => v.to!(int))
+            .processor!((int a) => a + 1)
+            .cliVal("12", "13", "14")
+    ];
+    opts[1].found = opts[2].found = true;
+    opts.each!(v => v.initialize);
+
+    assert(opts[0].get!bool == false);
+    assert(opts[1].get!int == 123);
+    assert(opts[2].get!(int[]) == [13, 14, 15]);
 }
 
 class BoolOption : Option {
@@ -441,29 +523,30 @@ class BoolOption : Option {
             || !this.configArg.isNull || !this.defaultArg.isNull;
     }
 
-    override void initialize() {
+    override Self initialize() {
         assert(this.isValid);
         this.settled = true;
         if (this.found) {
             this.innerData = (true);
             this.source = Source.Cli;
-            return;
+            return this;
         }
         if (!this.implyArg.isNull) {
             this.innerData = this.implyArg.get;
             this.source = Source.Imply;
-            return;
+            return this;
         }
         if (!this.configArg.isNull) {
             this.innerData = this.configArg.get;
             this.source = Source.Config;
-            return;
+            return this;
         }
         if (!this.defaultArg.isNull) {
             this.innerData = this.defaultArg.get;
             this.source = Source.Default;
-            return;
+            return this;
         }
+        return this;
     }
 
     @property
@@ -591,7 +674,7 @@ class ValueOption(T) : Option {
                 .defaultArg.isNull);
     }
 
-    override void initialize() {
+    override Self initialize() {
         assert(this.isValid);
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (T v) => false);
@@ -600,7 +683,7 @@ class ValueOption(T) : Option {
             if (!this.cliArg.isNull) {
                 this.innerValueData = this.cliArg.get!T;
                 this.source = Source.Cli;
-                return;
+                return this;
             }
             if (test_bool(this.presetArg)) {
                 this.isValueData = false;
@@ -610,12 +693,12 @@ class ValueOption(T) : Option {
                 this.innerValueData = this.presetArg.get!T;
             }
             this.source = Source.Preset;
-            return;
+            return this;
         }
         if (!this.envArg.isNull) {
             this.innerValueData = this.envArg.get!T;
             this.source = Source.Env;
-            return;
+            return this;
         }
         if (!this.implyArg.isNull) {
             if (test_bool(this.implyArg)) {
@@ -625,7 +708,7 @@ class ValueOption(T) : Option {
             if (test_t(this.implyArg))
                 this.innerValueData = this.implyArg.get!T;
             this.source = Source.Imply;
-            return;
+            return this;
         }
         if (!this.configArg.isNull) {
             if (test_bool(this.configArg)) {
@@ -635,7 +718,7 @@ class ValueOption(T) : Option {
             if (test_t(this.configArg))
                 this.innerValueData = this.configArg.get!T;
             this.source = Source.Config;
-            return;
+            return this;
         }
         if (!this.defaultArg.isNull) {
             if (test_bool(this.defaultArg)) {
@@ -645,14 +728,17 @@ class ValueOption(T) : Option {
             if (test_t(this.defaultArg))
                 this.innerValueData = this.defaultArg.get!T;
             this.source = Source.Imply;
-            return;
+            return this;
         }
+        return this;
     }
 
     @property
     override OptionVariant get() const {
         assert(this.isValid && this.settled);
-        return isValueData ? OptionVariant(this.innerValueData) : OptionVariant(this.innerBoolData);
+        auto fn = this.processFn;
+        T tmp = fn(this.innerValueData);
+        return isValueData ? OptionVariant(tmp) : OptionVariant(this.innerBoolData);
     }
 
     @property
@@ -666,7 +752,9 @@ class ValueOption(T) : Option {
     T get(U : T)() const {
         assert(this.isValid && this.settled);
         assert(this.isValueData);
-        return this.innerValueData;
+        auto fn = this.processFn;
+        T tmp = fn(this.innerValueData);
+        return tmp;
     }
 }
 
@@ -793,7 +881,7 @@ class VariadicOption(T) : Option {
                 .defaultArg.isNull);
     }
 
-    override void initialize() {
+    override Self initialize() {
         assert(this.isValid);
         this.settled = true;
         alias test_bool = visit!((T[] v) => false, (bool v) => true);
@@ -802,7 +890,7 @@ class VariadicOption(T) : Option {
             if (!this.cliArg.isNull) {
                 this.innerValueData = this.cliArg.get!(T[]);
                 this.source = Source.Cli;
-                return;
+                return this;
             }
             if (test_bool(this.presetArg)) {
                 this.isValueData = false;
@@ -812,12 +900,12 @@ class VariadicOption(T) : Option {
                 this.innerValueData = this.presetArg.get!(T[]);
             }
             this.source = Source.Preset;
-            return;
+            return this;
         }
         if (!this.envArg.isNull) {
             this.innerValueData = this.envArg.get!(T[]);
             this.source = Source.Env;
-            return;
+            return this;
         }
         if (!this.implyArg.isNull) {
             if (test_bool(this.implyArg)) {
@@ -827,7 +915,7 @@ class VariadicOption(T) : Option {
             if (test_t(this.implyArg))
                 this.innerValueData = this.implyArg.get!(T[]);
             this.source = Source.Imply;
-            return;
+            return this;
         }
         if (!this.configArg.isNull) {
             if (test_bool(this.configArg)) {
@@ -837,7 +925,7 @@ class VariadicOption(T) : Option {
             if (test_t(this.configArg))
                 this.innerValueData = this.configArg.get!(T[]);
             this.source = Source.Config;
-            return;
+            return this;
         }
         if (!this.defaultArg.isNull) {
             if (test_bool(this.defaultArg)) {
@@ -847,15 +935,18 @@ class VariadicOption(T) : Option {
             if (test_t(this.defaultArg))
                 this.innerValueData = this.defaultArg.get!(T[]);
             this.source = Source.Imply;
-            return;
+            return this;
         }
+        return this;
     }
 
     @property
     override OptionVariant get() const {
         assert(this.isValid && this.settled);
         if (isValueData) {
-            return OptionVariant(this.innerValueData.dup);
+            auto fn = this.processFn;
+            auto tmp = this.innerValueData.map!fn.array;
+            return OptionVariant(tmp);
         }
         return OptionVariant(this.innerBoolData);
     }
@@ -871,15 +962,21 @@ class VariadicOption(T) : Option {
     T[] get(U : T[])() const {
         assert(this.isValid && this.settled);
         assert(this.isValueData);
-        return this.innerValueData;
+        auto fn = this.processFn;
+        auto tmp = this.innerValueData.map!fn.array;
+        return tmp;
     }
 
     @property
     T get(U : T)() const {
         assert(this.isValid && this.settled);
         assert(this.isValueData);
-        auto fn = this.processReduceFn;
-        return reduce!(fn)(this.innerValueData);
+        auto process_fn = this.processFn;
+        auto reduce_fn = this.processReduceFn;
+        auto tmp = this.innerValueData
+            .map!process_fn
+            .reduce!reduce_fn;
+        return tmp;
     }
 }
 
@@ -935,7 +1032,7 @@ private string _camelReducer(string str, string word = "") {
     return str ~ cast(char) word[0].toUpper ~ cast(string) word[1 .. $];
 }
 
-private string _camelCase(string str) {
+package string _camelCase(string str) {
     import std.algorithm : reduce;
 
     return str.split("-").reduce!(_camelReducer);
@@ -1034,16 +1131,16 @@ unittest {
     }
 }
 
-__gshared Regex!char PTN_SHORT;
-__gshared Regex!char PTN_LONG;
-__gshared Regex!char PTN_VALUE;
-__gshared Regex!char PTN_SP;
-__gshared Regex!char PTN_NEGATE;
+// __gshared Regex!char PTN_SHORT;
+// __gshared Regex!char PTN_LONG;
+// __gshared Regex!char PTN_VALUE;
+// __gshared Regex!char PTN_SP;
+// __gshared Regex!char PTN_NEGATE;
 
-shared static this() {
-    PTN_SHORT = regex(`^-\w$`);
-    PTN_LONG = regex(`^--[(\w\-)\w]+\w$`);
-    PTN_NEGATE = regex(`^--no-[(\w\-)\w]+\w$`);
-    PTN_VALUE = regex(`(<[(\w\-)\w]+\w(\.{3})?>$)|(\[[(\w\-)\w]+\w(\.{3})?\]$)`);
-    PTN_SP = regex(`[ |,]+`);
-}
+// shared static this() {
+//     PTN_SHORT = regex(`^-\w$`);
+//     PTN_LONG = regex(`^--[(\w\-)\w]+\w$`);
+//     PTN_NEGATE = regex(`^--no-[(\w\-)\w]+\w$`);
+//     PTN_VALUE = regex(`(<[(\w\-)\w]+\w(\.{3})?>$)|(\[[(\w\-)\w]+\w(\.{3})?\]$)`);
+//     PTN_SP = regex(`[ |,]+`);
+// }
