@@ -62,7 +62,7 @@ class Argument {
 
     @property
     string name() const {
-        return this.name.idup;
+        return this._name.idup;
     }
 
     @property
@@ -145,13 +145,17 @@ class Argument {
     }
 }
 
+Argument createArgument(string flag, string desc = "") {
+    return createArgument!bool(flag, desc);
+}
+
 Argument createArgument(T : bool)(string flag, string desc = "") {
     bool is_variadic = flag[$ - 2] == '.';
     assert(!is_variadic);
     return new ValueArgument!bool(flag, desc);
 }
 
-Argument createArgument(T = bool)(string flag, string desc = "")
+Argument createArgument(T)(string flag, string desc = "")
         if (!is(T == bool) && isBaseArgValueType!T) {
     bool is_variadic = flag[$ - 2] == '.';
     if (is_variadic) {
@@ -162,12 +166,19 @@ Argument createArgument(T = bool)(string flag, string desc = "")
     }
 }
 
+Argument createArgument(T: U[], U)(string flag, string desc = "")
+        if (!is(U == bool)  && isBaseArgValueType!U) {
+    bool is_variadic = flag[$ - 2] == '.';
+    assert(is_variadic);
+    return new ValueArgument!T(flag, desc);
+}
+
 unittest {
     Argument[] args = [
         createArgument!int("<int>", ""),
         createArgument!string("[str]", ""),
         createArgument!int("<int>", ""),
-        createArgument!(double)("<int...>", "")
+        createArgument!(double[])("<int...>", "")
     ];
     import std.array;
     import std.algorithm;

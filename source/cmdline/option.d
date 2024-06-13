@@ -15,6 +15,7 @@ import mir.algebraic;
 
 import cmdline.error;
 import cmdline.pattern;
+import std.random;
 
 private struct OptionFlags {
     string shortFlag = "";
@@ -82,18 +83,20 @@ class Option {
 
     bool mandatory;
 
-    const bool required;
-    const bool optional;
-    const string shortFlag;
-    const string longFlag;
+    string flags;
 
-    const string valueName;
+    bool required;
+    bool optional;
+    string shortFlag;
+    string longFlag;
 
-    const bool variadic;
+    string valueName;
+
+    bool variadic;
 
     bool hiden;
 
-    string[] argChoices;
+    // string[] argChoices;
     string[] conflictsWith;
     string envKey;
     ImplyOptionMap implyMap;
@@ -107,12 +110,14 @@ class Option {
     alias ImplyOptionMap = OptionVariant[string];
 
     this(string flags, string description) {
+        this.flags = flags;
         this.description = description;
         this.mandatory = false;
         this.defaultValueDescription = "";
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
+        assert(longFlag != "");
         this.variadic = (opt.valueFlag == "" || opt.valueFlag[$ - 2] != '.') ? false : true;
         this.valueName = opt.valueFlag == "" ? "" : this.variadic ? opt.valueFlag[1 .. $ - 4].idup
             : opt.valueFlag[1 .. $ - 1].idup;
@@ -124,7 +129,7 @@ class Option {
             this.optional = opt.valueFlag[0] == '[' ? true : false;
         }
         this.hiden = false;
-        this.argChoices = [];
+        // this.argChoices = [];
         this.conflictsWith = [];
         this.implyMap = null;
         this.envKey = "";
@@ -182,29 +187,9 @@ class Option {
         return this;
     }
 
-    Self choices(const string[] values) {
-        foreach (value; values) {
-            bool flag = false;
-            foreach (item; this.argChoices) {
-                flag = item == value;
-                if (flag)
-                    break;
-            }
-            if (flag)
-                continue;
-            this.argChoices ~= value;
-        }
-        return this;
-    }
-
     @property
     string name() const {
-        if (!this.longFlag.length && !this.shortFlag.length)
-            throw new InvalidFlagError;
-        if (this.longFlag.length > 2) {
-            return this.longFlag[2 .. $].idup;
-        }
-        return this.longFlag[1 .. $].idup;
+        return this.longFlag[2 .. $].idup;
     }
 
     @property
@@ -263,11 +248,26 @@ class Option {
         throw new OptionMemberFnCallError;
     }
 
+    // Self choices(string[] values...) {
+    //     throw new OptionMemberFnCallError;
+    // }
+
     @property
     abstract bool isValid() const;
     @property
     abstract OptionVariant get() const;
     abstract Self initialize();
+
+    Self choices(T)(T[] values...) {
+        auto is_variadic = this.variadic;
+        if (is_variadic) {
+            auto derived = cast(VariadicOption!T) this;
+            return derived.choices(values);
+        } else {
+            auto derived = cast(ValueOption!T) this;
+            return derived.choices(values);
+        }
+    }
 
     Self defaultVal(T)(T value) if (isBaseOptionValueType!T) {
         static if (is(T == bool)) {
@@ -399,6 +399,10 @@ class Option {
         derived.processReduceFn = fn;
         return derived;
     }
+}
+
+Option createOption(string flags, string desc = "") {
+    return createOption!bool(flags, desc);
 }
 
 Option createOption(T : bool)(string flags, string desc = "") {
@@ -588,6 +592,13 @@ class ValueOption(T) : Option {
     ParseArgFn!T parseFn;
     ProcessArgFn!T processFn;
 
+    T[] argChoices;
+
+    static if (is(T == int) || is(T == double)) {
+        T _min = int.min;
+        T _max = int.max;
+    }
+
     this(string flags, string description) {
         super(flags, description);
         assert(!this.isBoolean);
@@ -599,6 +610,7 @@ class ValueOption(T) : Option {
         this.defaultArg = null;
         innerBoolData = false;
         innerValueData = T.init;
+        this.argChoices = [];
         isValueData = true;
         this.parseFn = (string v) => to!T(v);
         this.processFn = v => v;
@@ -612,7 +624,44 @@ class ValueOption(T) : Option {
 
     alias Self = typeof(this);
 
+    Self choices(T[] values...) {
+        foreach (index_i, i; values) {
+            foreach (j; values[index_i + 1 .. $]) {
+                assert(i != j);
+            }
+        }
+        static if (is(T == int) || is(T == double)) {
+            assert(values.find!(val => val < this._min || val > this._max).empty);
+        }
+        this.argChoices = values;
+        return this;
+    }
+
+    void _checkVal(in T value) const {
+        if (!this.argChoices.empty)
+            assert(this.argChoices.count(value));
+        static if (is(T == int) || is(T == double)) {
+            assert(value >= this._min && value <= this._max);
+        }
+    }
+
+    static if (is(T == int) || is(T == double)) {
+        Self rangeOf(T min, T max) {
+            assert(max > min);
+            this._min = min;
+            this._max = max;
+            return this;
+        }
+
+        Self choices(string[] values...) {
+            auto fn = this.parseFn;
+            auto arr = values.map!fn.array;
+            return this.choices(arr);
+        }
+    }
+
     Self defaultVal(T value) {
+        _checkVal(value);
         this.defaultArg = value;
         return this;
     }
@@ -624,6 +673,7 @@ class ValueOption(T) : Option {
     }
 
     Self configVal(T value) {
+        _checkVal(value);
         this.configArg = value;
         return this;
     }
@@ -635,6 +685,7 @@ class ValueOption(T) : Option {
     }
 
     Self implyVal(T value) {
+        _checkVal(value);
         this.implyArg = value;
         return this;
     }
@@ -647,16 +698,21 @@ class ValueOption(T) : Option {
 
     override Self cliVal(string value, string[] rest...) {
         assert(rest.length == 0);
-        this.cliArg = this.parseFn(value);
+        auto tmp = this.parseFn(value);
+        _checkVal(tmp);
+        this.cliArg = tmp;
         return this;
     }
 
     override Self envVal() {
-        this.envArg = this.parseFn(this.envStr);
+        auto tmp = this.parseFn(this.envStr);
+        _checkVal(tmp);
+        this.envArg = tmp;
         return this;
     }
 
     Self preset(T value) {
+        _checkVal(value);
         this.presetArg = value;
         return this;
     }
@@ -785,7 +841,14 @@ class VariadicOption(T) : Option {
     ParseArgFn!T parseFn;
     ProcessArgFn!T processFn;
 
+    T[] argChoices;
+
     ProcessReduceFn!T processReduceFn;
+
+    static if (is(T == int) || is(T == double)) {
+        T _min = int.min;
+        T _max = int.max;
+    }
 
     this(string flags, string description) {
         super(flags, description);
@@ -799,6 +862,7 @@ class VariadicOption(T) : Option {
         innerBoolData = false;
         innerValueData = null;
         isValueData = true;
+        this.argChoices = [];
         this.parseFn = (string v) => to!T(v);
         this.processFn = v => v;
         this.processReduceFn = (T cur, T prev) => cur;
@@ -812,8 +876,51 @@ class VariadicOption(T) : Option {
 
     alias Self = typeof(this);
 
+    Self choices(T[] values...) {
+        foreach (index_i, i; values) {
+            foreach (j; values[index_i + 1 .. $]) {
+                assert(i != j);
+            }
+        }
+        static if (is(T == int) || is(T == double)) {
+            assert(values.find!(val => val < this._min || val > this._max).empty);
+        }
+        this.argChoices = values;
+        return this;
+    }
+
+    void _checkVal(in T value) const {
+        if (!this.argChoices.empty)
+            assert(this.argChoices.count(value));
+        static if (is(T == int) || is(T == double)) {
+            assert(value >= this._min && value <= this._max);
+        }
+    }
+
+    void _checkVal(T[] values...) const {
+        foreach (T val; values) {
+            _checkVal(val);
+        }
+    }
+
+    static if (is(T == int) || is(T == double)) {
+        Self rangeOf(T min, T max) {
+            assert(max > min);
+            this._min = min;
+            this._max = max;
+            return this;
+        }
+
+        Self choices(string[] values...) {
+            auto fn = this.parseFn;
+            auto arr = values.map!fn.array;
+            return this.choices(arr);
+        }
+    }
+
     Self defaultVal(T value, T[] rest...) {
         auto tmp = [value] ~ rest;
+        _checkVal(tmp);
         this.defaultArg = tmp;
         return this;
     }
@@ -826,6 +933,7 @@ class VariadicOption(T) : Option {
 
     Self configVal(T value, T[] rest...) {
         auto tmp = [value] ~ rest;
+        _checkVal(tmp);
         this.configArg = tmp;
         return this;
     }
@@ -838,6 +946,7 @@ class VariadicOption(T) : Option {
 
     Self implyVal(T value, T[] rest...) {
         auto tmp = [value] ~ rest;
+        _checkVal(tmp);
         this.implyArg = tmp;
         return this;
     }
@@ -851,19 +960,24 @@ class VariadicOption(T) : Option {
     override Self cliVal(string value, string[] rest...) {
         string[] tmp = [value] ~ rest;
         auto fn = parseFn;
-        this.cliArg = tmp.map!(fn).array;
+        auto xtmp = tmp.map!(fn).array;
+        _checkVal(xtmp);
+        this.cliArg = xtmp;
         return this;
     }
 
     override Self envVal() {
         string[] str_arr = split(this.envStr, regex(`;`)).filter!(v => v != "").array;
         auto fn = parseFn;
-        this.envArg = str_arr.map!(fn).array;
+        auto tmp = str_arr.map!(fn).array;
+        _checkVal(tmp);
+        this.envArg = tmp;
         return this;
     }
 
     Self preset(T value, T[] rest...) {
         auto tmp = [value] ~ rest;
+        _checkVal(tmp);
         this.presetArg = tmp;
         return this;
     }
@@ -991,20 +1105,20 @@ unittest {
 class NegateOption {
     string shortFlag;
     string longFlag;
-
+    string flags;
     string description;
 
     this(string flags, string description) {
+        this.flags = flags;
         this.description = description;
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
+        assert(!(matchFirst(this.longFlag, PTN_NEGATE)).empty);
     }
 
     @property
     string name() const {
-        if (!matchAll(this.longFlag, PTN_NEGATE))
-            throw new InvalidFlagError;
         return this.longFlag[5 .. $].idup;
     }
 
@@ -1016,6 +1130,10 @@ class NegateOption {
     bool isFlag(string flag) const {
         return this.shortFlag == flag || this.longFlag == flag;
     }
+}
+
+NegateOption createNegateOption(string flags, string desc = "") {
+    return new NegateOption(flags, desc);
 }
 
 unittest {
