@@ -248,10 +248,6 @@ class Option {
         throw new OptionMemberFnCallError;
     }
 
-    // Self choices(string[] values...) {
-    //     throw new OptionMemberFnCallError;
-    // }
-
     @property
     abstract bool isValid() const;
     @property
@@ -439,9 +435,10 @@ unittest {
 
     opt_1.defaultVal().implyVal(false);
     opt_2.defaultVal().parser!((string v) => v.to!(int)).cliVal("123");
-    opt_3.defaultVal([123]).parser!((string v) => v.to!(int))
-        .processor!((int a) => a + 1)
-        .cliVal("12", "13", "14");
+    opt_3.defaultVal([123]);
+    opt_3.parser!((string v) => v.to!(int));
+    opt_3.processor!((int a) => a + 1);
+    opt_3.cliVal("12", "13", "14");
 
     opt_1.initialize();
     opt_2.found = true;
@@ -889,7 +886,7 @@ class VariadicOption(T) : Option {
         return this;
     }
 
-    void _checkVal(in T value) const {
+    void _checkVal_impl(in T value) const {
         if (!this.argChoices.empty)
             assert(this.argChoices.count(value));
         static if (is(T == int) || is(T == double)) {
@@ -897,9 +894,17 @@ class VariadicOption(T) : Option {
         }
     }
 
-    void _checkVal(T[] values...) const {
+    void _checkVal(T value, T[] rest...) const {
+        _checkVal_impl(value);
+        foreach (T val; rest) {
+            _checkVal_impl(val);
+        }
+    }
+
+    void _checkVal(T[] values) const {
+        assert(values.length > 0);
         foreach (T val; values) {
-            _checkVal(val);
+            _checkVal_impl(val);
         }
     }
 
@@ -1248,17 +1253,3 @@ unittest {
         assert(longFlag == "--mixed-flag-xx" && shortFlag == "-m" && valueFlag == "[value-flag...]");
     }
 }
-
-// __gshared Regex!char PTN_SHORT;
-// __gshared Regex!char PTN_LONG;
-// __gshared Regex!char PTN_VALUE;
-// __gshared Regex!char PTN_SP;
-// __gshared Regex!char PTN_NEGATE;
-
-// shared static this() {
-//     PTN_SHORT = regex(`^-\w$`);
-//     PTN_LONG = regex(`^--[(\w\-)\w]+\w$`);
-//     PTN_NEGATE = regex(`^--no-[(\w\-)\w]+\w$`);
-//     PTN_VALUE = regex(`(<[(\w\-)\w]+\w(\.{3})?>$)|(\[[(\w\-)\w]+\w(\.{3})?\]$)`);
-//     PTN_SP = regex(`[ |,]+`);
-// }
