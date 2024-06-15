@@ -15,7 +15,6 @@ import mir.algebraic;
 
 import cmdline.error;
 import cmdline.pattern;
-import std.random;
 
 private struct OptionFlags {
     string shortFlag = "";
@@ -94,9 +93,8 @@ class Option {
 
     bool variadic;
 
-    bool hiden;
+    bool hidden;
 
-    // string[] argChoices;
     string[] conflictsWith;
     string envKey;
     ImplyOptionMap implyMap;
@@ -128,7 +126,7 @@ class Option {
             this.required = opt.valueFlag[0] == '<' ? true : false;
             this.optional = opt.valueFlag[0] == '[' ? true : false;
         }
-        this.hiden = false;
+        this.hidden = false;
         // this.argChoices = [];
         this.conflictsWith = [];
         this.implyMap = null;
@@ -153,22 +151,31 @@ class Option {
     Self implies(string[] names...) {
         assert(names.length);
         foreach (name; names) {
-            auto value_ptr = name in this.implyMap;
-            if (value_ptr !is null)
+            bool signal = false;
+            foreach (k; implyMap.byKey) {
+                if (name == k[0 .. name.length]) {
+                    signal = true;
+                    break;
+                }
+            }
+            if (signal)
                 throw new ImplyOptionError;
-            implyMap[name] = true;
+            implyMap[name ~ ":" ~ bool.stringof] = true;
         }
         return this;
     }
 
-    Self implies(T)(const T[string] optionMap) if (isOptionValueType!T) {
-        assert(optionMap !is null);
-        foreach (key, value; optionMap) {
-            auto value_ptr = key in this.implyMap;
-            if (value_ptr !is null)
-                throw new ImplyOptionError;
-            implyMap[key] = value;
+    Self implies(T)(string key, T value) if (isOptionValueType!T) {
+        bool signal = false;
+        foreach (k; implyMap.byKey) {
+            if (key == k[0 .. key.length]) {
+                signal = true;
+                break;
+            }
         }
+        if (signal)
+            throw new ImplyOptionError;
+        implyMap[key ~ ":" ~ T.stringof] = value;
         return this;
     }
 
@@ -183,7 +190,7 @@ class Option {
     }
 
     Self hideHelp(bool hide = true) {
-        this.hiden = hide;
+        this.hidden = hide;
         return this;
     }
 
@@ -254,14 +261,32 @@ class Option {
     abstract OptionVariant get() const;
     abstract Self initialize();
 
-    Self choices(T)(T[] values...) {
+    Self choices(T)(T[] values) {
         auto is_variadic = this.variadic;
         if (is_variadic) {
             auto derived = cast(VariadicOption!T) this;
             return derived.choices(values);
-        } else {
+        }
+        else {
             auto derived = cast(ValueOption!T) this;
             return derived.choices(values);
+        }
+    }
+
+    Self choices(T)(T value, T[] rest...) {
+        auto tmp = rest ~ value;
+        return choices(tmp);
+    }
+
+    Self rangeOf(T)(T min, T max) if (is(T == int) || is(T == double)) {
+        auto is_variadic = this.variadic;
+        if (is_variadic) {
+            auto derived = cast(VariadicOption!T) this;
+            return derived.rangeOf(min, max);
+        }
+        else {
+            auto derived = cast(ValueOption!T) this;
+            return derived.rangeOf(min, max);
         }
     }
 
@@ -325,7 +350,7 @@ class Option {
 
     Self implyVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return implytVal(values[0], cast(T[]) values[1 .. $]);
+        return implyVal(values[0], cast(T[]) values[1 .. $]);
     }
 
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
@@ -395,6 +420,81 @@ class Option {
         derived.processReduceFn = fn;
         return derived;
     }
+
+    string typeStr() const {
+        return "";
+    }
+
+    string defaultValStr() const {
+        return "";
+    }
+
+    string presetStr() const {
+        return "";
+    }
+
+    string envValStr() const {
+        if (this.envKey == "")
+            return this.envKey;
+        return "env: " ~ this.envKey;
+    }
+
+    string implyOptStr() const {
+        if (!implyMap)
+            return "";
+        auto str = "imply { ";
+        foreach (key, val; implyMap) {
+            auto captures = matchFirst(key, PTN_IMPLYMAPKEY);
+            auto name = captures[1];
+            auto is_variadic = captures[4] == "[]";
+            auto type_str = captures[2];
+            assert(name != "");
+            string value;
+            if (!is_variadic) {
+                if (type_str == "bool")
+                    value = val.get!bool
+                        .to!string;
+                if (type_str == "string")
+                    value = val.get!string;
+                if (type_str == "int")
+                    value = val.get!int
+                        .to!string;
+                if (type_str == "double")
+                    value = val.get!double
+                        .to!string;
+            }
+            else {
+                if (type_str == "string[]")
+                    value = val.get!(string[])
+                        .to!string;
+                if (type_str == "int[]")
+                    value = val.get!(int[])
+                        .to!string;
+                if (type_str == "double[]")
+                    value = val.get!(double[])
+                        .to!string;
+            }
+            str ~= (name ~ ": " ~ value ~ ", ");
+        }
+        str ~= "}";
+        return str;
+    }
+
+    string conflictOptStr() const {
+        if (this.conflictsWith.empty)
+            return "";
+        auto str = "conflict with [ ";
+        conflictsWith.each!((name) { str ~= (name ~ ", "); });
+        return str ~ "]";
+    }
+
+    string choicesStr() const {
+        return "";
+    }
+
+    string rangeOfStr() const {
+        return "";
+    }
 }
 
 Option createOption(string flags, string desc = "") {
@@ -422,6 +522,11 @@ Option createOption(T)(string flags, string desc = "")
     }
 }
 
+Option createOption(T : U[], U)(string flags, string desc = "")
+        if (!is(U == bool) && isBaseOptionValueType!U) {
+    return createOption!U(flags, desc);
+}
+
 unittest {
     Option[] opts = [
         new BoolOption("-m, --mixed", ""),
@@ -429,12 +534,14 @@ unittest {
         new VariadicOption!int("-m, --mixed <dig...>", "")
     ];
 
-    auto opt_1 = opts[0];
-    auto opt_2 = opts[1];
-    auto opt_3 = opts[2];
+    Option opt_1 = opts[0];
+    Option opt_2 = opts[1];
+    Option opt_3 = opts[2];
 
     opt_1.defaultVal().implyVal(false);
     opt_2.defaultVal().parser!((string v) => v.to!(int)).cliVal("123");
+    opt_3.rangeOf(11, 150);
+    opt_3.choices(12, 13, 14, 15, 123);
     opt_3.defaultVal([123]);
     opt_3.parser!((string v) => v.to!(int));
     opt_3.processor!((int a) => a + 1);
@@ -525,6 +632,8 @@ class BoolOption : Option {
     }
 
     override Self initialize() {
+        if (this.settled)
+            return this;
         assert(this.isValid);
         this.settled = true;
         if (this.found) {
@@ -552,14 +661,26 @@ class BoolOption : Option {
 
     @property
     override OptionVariant get() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         return OptionVariant(this.innerData);
     }
 
     @property
     bool get(T : bool)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         return this.innerData;
+    }
+
+    override string typeStr() const {
+        return "type: " ~ "bool";
+    }
+
+    override string defaultValStr() const {
+        if (defaultArg.isNull)
+            return "";
+        else
+            return "default: " ~ this.get!bool
+                .to!string;
     }
 }
 
@@ -655,6 +776,10 @@ class ValueOption(T) : Option {
             auto arr = values.map!fn.array;
             return this.choices(arr);
         }
+
+        override string rangeOfStr() const {
+            return "range: " ~ _min.to!string ~ " ~ " ~ _max.to!string;
+        }
     }
 
     Self defaultVal(T value) {
@@ -728,6 +853,8 @@ class ValueOption(T) : Option {
     }
 
     override Self initialize() {
+        if (this.settled)
+            return this;
         assert(this.isValid);
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (T v) => false);
@@ -788,7 +915,7 @@ class ValueOption(T) : Option {
 
     @property
     override OptionVariant get() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         auto fn = this.processFn;
         T tmp = fn(this.innerValueData);
         return isValueData ? OptionVariant(tmp) : OptionVariant(this.innerBoolData);
@@ -796,27 +923,59 @@ class ValueOption(T) : Option {
 
     @property
     bool get(U : bool)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         assert(!this.isValueData);
         return this.innerBoolData;
     }
 
     @property
     T get(U : T)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         assert(this.isValueData);
         auto fn = this.processFn;
         T tmp = fn(this.innerValueData);
         return tmp;
+    }
+
+    override string typeStr() const {
+        return "type: " ~ (this.isOptional ? T.stringof ~ "|true" : T.stringof);
+    }
+
+    override string defaultValStr() const {
+        if (defaultArg.isNull)
+            return "";
+        return "default: " ~ defaultArg.get!T
+            .to!string;
+    }
+
+    override string presetStr() const {
+        if (presetArg.isNull)
+            return "";
+        alias test_bool = visit!((bool v) => true, (const T v) => false);
+        alias test_t = visit!((const T v) => true, (bool v) => false);
+        if (test_bool(presetArg))
+            return "preset: " ~ presetArg.get!bool
+                .to!string;
+        if (test_t(presetArg))
+            return "preset: " ~ presetArg.get!T
+                .to!string;
+        throw new CMDLineError;
+    }
+
+    override string choicesStr() const {
+        if (argChoices.empty)
+            return "";
+        return "choices " ~ argChoices.to!string;
     }
 }
 
 unittest {
     auto vopt = new ValueOption!int("-m, --mixed [raw]", "");
     vopt.defaultVal(123);
+    vopt.preset(125);
     vopt.found = true;
     vopt.initialize;
-    assert(vopt.get == true);
+    assert(vopt.get == 125);
 }
 
 class VariadicOption(T) : Option {
@@ -921,6 +1080,10 @@ class VariadicOption(T) : Option {
             auto arr = values.map!fn.array;
             return this.choices(arr);
         }
+
+        override string rangeOfStr() const {
+            return "range: " ~ _min.to!string ~ " ~ " ~ _max.to!string;
+        }
     }
 
     Self defaultVal(T value, T[] rest...) {
@@ -1001,6 +1164,8 @@ class VariadicOption(T) : Option {
     }
 
     override Self initialize() {
+        if (this.settled)
+            return this;
         assert(this.isValid);
         this.settled = true;
         alias test_bool = visit!((T[] v) => false, (bool v) => true);
@@ -1061,7 +1226,7 @@ class VariadicOption(T) : Option {
 
     @property
     override OptionVariant get() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         if (isValueData) {
             auto fn = this.processFn;
             auto tmp = this.innerValueData.map!fn.array;
@@ -1072,14 +1237,14 @@ class VariadicOption(T) : Option {
 
     @property
     bool get(U : bool)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         assert(!this.isValueData);
         return this.innerBoolData;
     }
 
     @property
     T[] get(U : T[])() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         assert(this.isValueData);
         auto fn = this.processFn;
         auto tmp = this.innerValueData.map!fn.array;
@@ -1088,7 +1253,7 @@ class VariadicOption(T) : Option {
 
     @property
     T get(U : T)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         assert(this.isValueData);
         auto process_fn = this.processFn;
         auto reduce_fn = this.processReduceFn;
@@ -1096,6 +1261,38 @@ class VariadicOption(T) : Option {
             .map!process_fn
             .reduce!reduce_fn;
         return tmp;
+    }
+
+    override string typeStr() const {
+        return "type: " ~ (isOptional ? T.stringof ~ "[]|true" : T.stringof ~ "[]");
+    }
+
+    override string defaultValStr() const {
+        if (defaultArg.isNull)
+            return "";
+        return "default: " ~ defaultArg.get!(T[])
+            .to!string;
+    }
+
+    override string presetStr() const {
+        if (presetArg.isNull)
+            return "";
+        alias test_bool = visit!((const T[] v) => false, (bool v) => true);
+        alias test_t = visit!((const T[] v) => true, (bool v) => false);
+        // pragma(msg, typeof(test_bool).stringof);
+        if (test_bool(presetArg))
+            return "preset: " ~ presetArg.get!bool
+                .to!string;
+        if (test_t(presetArg))
+            return "preset: " ~ presetArg.get!(T[])
+                .to!string;
+        throw new CMDLineError;
+    }
+
+    override string choicesStr() const {
+        if (argChoices.empty)
+            return "";
+        return "choices " ~ argChoices.to!string;
     }
 }
 
@@ -1113,9 +1310,12 @@ class NegateOption {
     string flags;
     string description;
 
+    bool hidden;
+
     this(string flags, string description) {
         this.flags = flags;
         this.description = description;
+        this.hidden = false;
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;

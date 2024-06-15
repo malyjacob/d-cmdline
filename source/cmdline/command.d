@@ -5,6 +5,7 @@ import std.process;
 import std.conv;
 import std.array;
 import std.range;
+import std.range.primitives;
 import std.traits;
 import std.regex;
 import std.string;
@@ -21,16 +22,19 @@ import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
 
+enum AddHelpPos : string {
+    BeforeAll = "beforeAll",
+    Before = "before",
+    After = "after",
+    AfterAll = "afterAll"
+}
+
 class Command : EventManager {
     Command parent = null;
     Command[] _commands = [];
 
     Option[] _options = [];
     NegateOption[] _negates = [];
-
-    // Option[string] shortFlagOptionMap = null;
-    // Option[string] longFlagOptionMap = null;
-    // NegateOption[string] negateOptionMap = null;
 
     Argument[] _arguments = [];
 
@@ -40,6 +44,7 @@ class Command : EventManager {
     string _selfPath = "";
 
     string _version = "";
+    string _usage = "";
 
     string _description = "";
     string[string] _argsDescription = null;
@@ -54,18 +59,22 @@ class Command : EventManager {
     string[] unknownFlags = [];
     string sub = "";
 
-    bool _allowUnknownOption = false;
+    ArgVariant[] args = [];
+    OptionVariant[string] opts = null;
+
     bool _allowExcessArguments = true;
     bool _showHelpAfterError = false;
     bool _showSuggestionAfterError = true;
     bool _combineFlagAndOptionalValue = true;
 
     void function(CMDLineError) _exitCallback = null;
-
+    void delegate() _actionHandler = null;
     Help _helpConfiguration = null;
     OutputConfiguration _outputConfiguration = new OutputConfiguration();
 
     bool _hidden = false;
+    bool _addImplicitHelpCommand = true;
+    bool _addImplicitHelpOption = true;
     Option _helpOption = null;
     Command _helpCommand = null;
 
@@ -82,7 +91,6 @@ class Command : EventManager {
 
     Self copyInheritedSettings(Command src) {
         this._allowExcessArguments = src._allowExcessArguments;
-        this._allowUnknownOption = src._allowUnknownOption;
         this._showHelpAfterError = src._showHelpAfterError;
         this._showSuggestionAfterError = src._showSuggestionAfterError;
         this._combineFlagAndOptionalValue = src._combineFlagAndOptionalValue;
@@ -92,12 +100,12 @@ class Command : EventManager {
         return this;
     }
 
-    Command[] _getCommandAndAncestors() {
+    inout(Command)[] _getCommandAndAncestors() inout {
         Command[] result = [];
-        for (Command command = this; command !is null; command = command.parent) {
-            result ~= command;
+        for (Command cmd = cast(Command) this; cmd; cmd = cmd.parent) {
+            result ~= cmd;
         }
-        return result;
+        return cast(inout(Command)[]) result;
     }
 
     string description() const {
@@ -116,17 +124,12 @@ class Command : EventManager {
         return this;
     }
 
-    const(Help) configureHelp() const {
+    inout(Help) configureHelp() inout {
         return this._helpConfiguration;
     }
 
     Command command(Args...)(string nameAndArgs, bool[string] cmdOpts = null) {
-        auto caputures = matchFirst(nameAndArgs, PTN_CMDNAMEANDARGS);
-        string name = caputures[1], args = caputures[2];
-        assert(name != "");
-        auto cmd = createCommand(name);
-        if (args != "")
-            cmd.arguments!Args(args);
+        auto cmd = createCommand!Args(nameAndArgs);
         this._registerCommand(cmd);
         cmd.parent = this;
         cmd.copyInheritedSettings(this);
@@ -142,19 +145,13 @@ class Command : EventManager {
     }
 
     Self command(Args...)(string nameAndArgs, string desc, string[string] execOpts = null) {
-        auto caputures = matchFirst(nameAndArgs, PTN_CMDNAMEANDARGS);
-        string name = caputures[1], args = caputures[2];
-        assert(name != "");
-        auto cmd = createCommand(name);
-        cmd.description(desc);
+        auto cmd = createCommand!Args(nameAndArgs, desc);
         cmd._execHandler = true;
         if (execOpts) {
             auto exec_file = "execFile" in execOpts;
             if (exec_file)
                 cmd._execFile = *exec_file;
         }
-        if (args != "")
-            cmd.arguments!Args(args);
         this._registerCommand(cmd);
         cmd.parent = this;
         cmd.copyInheritedSettings(this);
@@ -280,7 +277,224 @@ class Command : EventManager {
                     option.flags, this._name, match_flag
             ));
         }
+        if (auto help_option = this._helpOption) {
+            if (help_option.name == option.name)
+                throw new CMDLineError(format!"Cannot add negate-option '%s'
+                    due to confliction help option `%s`"(option.flags, help_option.flags));
+        }
+        else if (option.name == "help") {
+            throw new CMDLineError(format!"Cannot add negate-option '%s'
+                    due to confliction help option `%s`"(option.flags, "-h, --help"));
+        }
+        if (auto version_option = this._versionOption) {
+            if (version_option.name == option.name)
+                throw new CMDLineError(format!"Cannot add negate-option '%s'
+                    due to confliction version option `%s`"(option.flags, version_option.flags));
+        }
+        if (auto config_option = this._configOption) {
+            if (config_option.name == option.name) {
+                throw new CMDLineError(format!"Cannot add negate-option '%s'
+                    due to confliction config option `%s`"(option.flags, config_option.flags));
+            }
+        }
         this._negates ~= option;
+    }
+
+    Self addOption(Option option) {
+        this._registerOption(option);
+        this.on("option:" ~ option.name, (string val, string[] vals...) {
+            // auto invalid_msg = format!"error: option `%s` argument `%s` is invalid."(option.flags, val);
+            setOptionVal!(Source.Cli)(option.name, val, vals);
+        });
+        return this;
+    }
+
+    Self addOption(NegateOption option) {
+        this._registerOption(option);
+        return this;
+    }
+
+    Self _optionImpl(T, bool isMandatory = false)(string flags, string desc)
+            if (isOptionValueType!T) {
+        auto option = createOption!T(flags, desc);
+        option.makeOptionMandatory(isMandatory);
+        return this.addOption(option);
+    }
+
+    Self option(T)(string flags, string desc) {
+        return _optionImpl!(T)(flags, desc);
+    }
+
+    Self requiredOption(T)(string flags, string desc) {
+        return _optionImpl!(T, true)(flags, desc);
+    }
+
+    Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
+            if (isOptionValueType!T) {
+        auto option = createOption!T(flags, desc);
+        option.makeOptionMandatory(isMandatory);
+        option.defaultVal(defaultValue);
+        return this.addOption(option);
+    }
+
+    Self option(T)(string flags, string desc, T defaultValue) {
+        return _optionImpl(flags, desc, defaultValue);
+    }
+
+    Self requiredOption(T)(string flags, string desc, T defaultValue) {
+        return _optionImpl!(T, true)(flags, desc, defaultValue);
+    }
+
+    Self setOptionVal(Source src, T)(string key, T value) if (isOptionValueType!T) {
+        Option opt = this._findOption(key);
+        assert(opt);
+        switch (src) {
+        case Source.Default:
+            opt.defaultVal(value);
+            break;
+        case Source.Config:
+            opt.configVal(value);
+            break;
+        case Source.Imply:
+            opt.implyVal(value);
+            break;
+        case Source.Preset:
+            opt.preset(value);
+            break;
+        default:
+            throw new CMDLineError;
+            break;
+        }
+        return this;
+    }
+
+    Self setOptionVal(Source src)(string key) {
+        auto opt = this._findOption(key);
+        assert(opt);
+        switch (src) {
+        case Source.Default:
+            opt.defaultVal();
+            break;
+        case Source.Config:
+            opt.configVal();
+            break;
+        case Source.Imply:
+            opt.implyVal();
+            break;
+        case Source.Preset:
+            opt.preset();
+            break;
+        default:
+            throw new CMDLineError;
+            break;
+        }
+        return this;
+    }
+
+    Self setOptionVal(Source src : Source.Env)(string key) {
+        auto opt = this._findOption(key);
+        assert(opt);
+        opt.envVal();
+        return this;
+    }
+
+    Self setOptionVal(Source src : Source.Cli, T:
+        string)(string key, T value, T[] rest...) {
+        auto opt = this._findOption(key);
+        assert(opt);
+        opt.cliVal(value, rest);
+        return this;
+    }
+
+    Self setOptionVal(Source src : Source.Cli, T:
+        string)(string key, T values...) {
+        return this.setOptionVal!src(key, values[0], values[1 .. $]);
+    }
+
+    Self setOptionValDirectly(T)(string key, T value, Source src = Source.None)
+            if (isOptionValueType!T) {
+        auto opt = this._findOption(key);
+        assert(opt);
+        static if (!is(ElementType!T U == void) && !is(T == string)) {
+            VariadicOption!U derived = cast(VariadicOption!U) opt;
+            derived.innerValueData = value;
+            derived.source = src;
+            derived.settled = true;
+        }
+        else {
+            ValueOption!T derived = cast(ValueOption!T) opt;
+            derived.innerValueData = value;
+            derived.source = src;
+            derived.settled = true;
+        }
+        return this;
+    }
+
+    Self setOptionValDirectly(T)(string key, Source src = Source.None)
+            if (isOptionValueType!T) {
+        auto opt = this._findOption(key);
+        assert(opt && opt.isOptional);
+        static if (!is(ElementType!T U == void) && !is(T == string)) {
+            VariadicOption!U derived = cast(VariadicOption!U) opt;
+            derived.innerBoolData = true;
+            derived.isValueData = true;
+            derived.source = src;
+            derived.settled = true;
+        }
+        else {
+            ValueOption!T derived = cast(ValueOption!T) opt;
+            derived.innerBoolData = true;
+            derived.isValueData = true;
+            derived.source = src;
+            derived.settled = true;
+        }
+        return this;
+    }
+
+    Self setOptionValDirectly(string key, bool value = true, Source src = Source.None) {
+        auto opt = this._findOption(key);
+        assert(opt);
+        BoolOption derived = cast(BoolOption) opt;
+        derived.innerData = value;
+        derived.source = src;
+        derived.settled = true;
+        return this;
+    }
+
+    inout(OptionVariant) getOptionVal(string key) inout {
+        if (this.opts && key in this.opts)
+            return this.opts[key];
+        auto opt = this._findOption(key);
+        assert(opt);
+        return opt.get;
+    }
+
+    inout(OptionVariant) getOptionValWithGlobal(string key) inout {
+        auto cmds = this._getCommandAndAncestors();
+        foreach (cmd; cmds) {
+            if (cmd.opts && key in cmd.opts)
+                return cmd.opts[key];
+            auto opt = this._findOption(key);
+            assert(opt);
+            return opt.get;
+        }
+        throw new CMDLineError;
+    }
+
+    Source getOptionValSource(string key) const {
+        auto opt = this._findOption(key);
+        assert(opt);
+        return opt.source;
+    }
+
+    Source getOptionValWithGlobalSource(string key) const {
+        auto cmds = this._getCommandAndAncestors();
+        foreach (cmd; cmds) {
+            auto opt = this._findOption(key);
+            assert(opt);
+            return opt.source;
+        }
+        throw new CMDLineError;
     }
 
     Self name(string str) {
@@ -289,7 +503,7 @@ class Command : EventManager {
     }
 
     string name() const {
-        return this._name;
+        return this._name.idup;
     }
 
     Self setVersion(string str, string flags = "", string desc = "") {
@@ -297,16 +511,151 @@ class Command : EventManager {
         flags = flags == "" ? "-V, --version" : flags;
         desc = desc == "" ? "output the version number" : desc;
         this._versionOption = createOption(flags, desc);
-        this.on("option:" ~ _versionOption.name, (string _val = "") {
-            this._outputConfiguration.writeOut(this._version);
+        this.on("option:" ~ _versionOption.name, () {
+            this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
-        auto cmd = createCommand("version");
+        Command cmd = createCommand("version").description("output the version number");
+        cmd.parent = this;
+        this.on("command:" ~ _versionOption.name, () {
+            this._outputConfiguration.writeOut(this._version ~ "\n");
+            this._exitSuccessfully();
+        });
         return this;
     }
 
     string getVersion() const {
-        return this._version;
+        return this._version.idup;
+    }
+
+    Self setHelpCommand(string flags = "", string desc = "") {
+        flags = flags == "" ? "help [command]" : flags;
+        desc = desc == "" ? "display help for command" : desc;
+        Command help_cmd = createCommand!(string)(flags, desc);
+        help_cmd.setHelpOption(false);
+        this._addImplicitHelpCommand = true;
+        this._helpCommand = help_cmd;
+        return this;
+    }
+
+    Self setHelpCommand(bool enable) {
+        this._addImplicitHelpCommand = enable;
+        return this;
+    }
+
+    Self addHelpCommand(Command cmd) {
+        this._addImplicitHelpCommand = true;
+        this._helpCommand = cmd;
+        return this;
+    }
+
+    Self addHelpCommand(string flags = "", string desc = "") {
+        return this.setHelpCommand(flags, desc);
+    }
+
+    Command _getHelpCommand() {
+        if (!this._addImplicitHelpCommand)
+            return null;
+        if (!this._helpCommand)
+            this.setHelpCommand();
+        return this._helpCommand;
+    }
+
+    Self setHelpOption(string flags = "", string desc = "") {
+        flags = flags == "" ? "-h, --help" : flags;
+        desc = desc == "" ? "display help for command" : desc;
+        this._helpOption = createOption(flags, desc);
+        return this;
+    }
+
+    Self setHelpOption(bool enable) {
+        this._addImplicitHelpOption = enable;
+        return this;
+    }
+
+    Self addHelpOption(Option option) {
+        this._helpOption = option;
+        return this;
+    }
+
+    Self addHelpOption(string flags = "", string desc = "") {
+        return this.setHelpOption(flags, desc);
+    }
+
+    Option _getHelpOption() {
+        if (!this._addImplicitHelpCommand)
+            return null;
+        if (!this._helpOption)
+            this.setHelpOption();
+        return this._helpOption;
+    }
+
+    void outputHelp(bool isErrorMode = false) const {
+        auto writer = isErrorMode ?
+            this._outputConfiguration.writeErr : this._outputConfiguration.writeOut;
+        auto ancestors = cast(Command[]) _getCommandAndAncestors();
+        ancestors.reverse.each!(
+            cmd => cmd.emit("beforeAllHelp", isErrorMode)
+        );
+        this.emit("beforeHelp", isErrorMode);
+        writer(helpInfo(isErrorMode) ~ "\n");
+        this.emit("afterHelp", isErrorMode);
+        ancestors.each!(
+            cmd => cmd.emit("afterAllHelp", isErrorMode)
+        );
+    }
+
+    string helpInfo(bool isErrorMode = false) const {
+        auto helper = cast(Help) this._helpConfiguration;
+        helper.helpWidth = isErrorMode ?
+            this._outputConfiguration.getErrHelpWidth() : this._outputConfiguration.getOutHelpWidth();
+        return helper.formatHelp(this);
+    }
+
+    void help(bool isErrorMode = false) {
+        this.outputHelp(isErrorMode);
+        if (isErrorMode)
+            this._exit("(outputHelp)", 1, "command.help");
+        this._exit(0);
+    }
+
+    Self addHelpText(AddHelpPos pos, string text) {
+        string help_event = pos.to!string ~ "Help";
+        this.on(help_event, (bool isErrMode) {
+            if (text.length) {
+                auto writer = isErrMode ?
+                    this._outputConfiguration.writeErr : this._outputConfiguration.writeOut;
+                writer(text ~ "\n");
+            }
+        });
+        return this;
+    }
+
+    void _outputHelpIfRequested(string[] flags) {
+        auto help_opt = this._getHelpOption();
+        bool help_requested = help_opt !is null &&
+            !flags.find!(flag => help_opt.isFlag(flag)).empty;
+        if (help_requested) {
+            this.outputHelp();
+            this._exitSuccessfully();
+        }
+    }
+
+    Self action(alias fn)() {
+        auto listener = () {
+            auto args = this._arguments
+                .filter!(arg => arg.settled)
+                .map!(arg => arg.get)
+                .array;
+            auto options = this._options
+                .filter!(opt => opt.settled)
+                .map!(opt => tuple(opt.name, opt.get))
+                .assocArray;
+            fn(args, options);
+            this._exitSuccessfully();
+        };
+        this._actionHandler = listener;
+        return this;
     }
 
     Self aliasName(string aliasStr) {
@@ -342,20 +691,20 @@ class Command : EventManager {
         return this._aliasNames;
     }
 
-    Command _findCommand(string name) {
-        auto validate = (Command cmd) => cmd._name == name || cast(bool) cmd._aliasNames.count(
+    inout(Command) _findCommand(string name) inout {
+        auto validate = (inout Command cmd) => cmd._name == name || cast(bool) cmd._aliasNames.count(
             name);
         auto tmp = this._commands.find!validate;
         return tmp.empty ? null : tmp[0];
     }
 
-    Option _findOption(string flag) {
-        auto tmp = this._options.find!(opt => opt.isFlag(flag));
+    inout(Option) _findOption(string flag) inout {
+        auto tmp = this._options.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
     }
 
-    NegateOption _findNegateOption(string flag) {
-        auto tmp = this._negates.find!(opt => opt.isFlag(flag));
+    inout(NegateOption) _findNegateOption(string flag) inout {
+        auto tmp = this._negates.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
     }
 
@@ -414,7 +763,7 @@ class Command : EventManager {
         return this;
     }
 
-    const(OutputConfiguration) configureOutput() const {
+    inout(OutputConfiguration) configureOutput() inout {
         return this._outputConfiguration;
     }
 
@@ -430,11 +779,6 @@ class Command : EventManager {
 
     Self comineFlagAndOptionValue(bool combine) {
         this._combineFlagAndOptionalValue = combine;
-        return this;
-    }
-
-    Self allowUnknownOption(bool allow) {
-        this._allowUnknownOption = allow;
         return this;
     }
 
@@ -455,29 +799,69 @@ class Command : EventManager {
         auto fn = this._exitCallback;
         if (fn)
             fn(new CMDLineError(msg, exitCode, code));
-        this._exitSuccessfully();
+        this._exit(exitCode);
     }
 
-    void _exitSuccessfully(ubyte exitCode = 0) const {
+    void _exitSuccessfully() const {
+        _exit(0);
+    }
+
+    void _exit(ubyte exitCode) const {
         import core.stdc.stdlib : exit;
+
         exit(exitCode);
     }
 
-    // void error(string msg = "", ubyte exitCode = 1, string code = "") {
-    //     this._outputConfiguration.outputError!(this._outputConfiguration.writeErr)(msg ~ "\n");
+    void error(string msg = "", string code = "command.error", ubyte exitCode = 1) {
+        this._outputConfiguration.writeErr(msg ~ "\n");
+        if (this._showHelpAfterError) {
+            this._outputConfiguration.writeErr("\n");
+            this.outputHelp(true);
+        }
+        this._exit(msg, exitCode, code);
+    }
 
-    // }
+    string usage() const {
+        if (this._usage == "") {
+            string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
+            string[] seed = [];
+            return "" ~ (seed ~
+                    (_options.length || _addImplicitHelpOption ? "[options]" : [
+            ]) ~
+                    (_commands.length ? "[command]" : []) ~
+                    (_arguments.length ? args_str : [])
+            ).join(" ");
+        }
+        return this._usage;
+    }
+
+    Self usage(string str) {
+        if (str == "") {
+            string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
+            string[] seed = [];
+            _usage = "" ~ (seed ~
+                    (_options.length || _addImplicitHelpOption ? "[options]" : [
+            ]) ~
+                    (_commands.length ? "[command]" : []) ~
+                    (_arguments.length ? args_str : [])
+            ).join(" ");
+        }
+        else
+            this._usage = str;
+        return this;
+    }
 }
 
 unittest {
     auto cmd = new Command("cmdline");
     assert(cmd._allowExcessArguments);
-    assert(!cmd._allowUnknownOption);
-
     cmd.description("this is test");
     assert("this is test" == cmd.description);
     cmd.description("this is test", ["first": "1st", "second": "2nd"]);
     assert(cmd._argsDescription == ["first": "1st", "second": "2nd"]);
+    cmd.setVersion("0.0.1");
+    // cmd.emit("command:version");
+    // cmd.emit("option:version");
 }
 
 unittest {
@@ -503,6 +887,17 @@ unittest {
 
 Command createCommand(string name) {
     return new Command(name);
+}
+
+Command createCommand(Args...)(string nameAndArgs, string desc = "") {
+    auto caputures = matchFirst(nameAndArgs, PTN_CMDNAMEANDARGS);
+    string name = caputures[1], _args = caputures[2];
+    assert(name != "");
+    auto cmd = createCommand(name);
+    cmd.description(desc);
+    if (_args != "")
+        cmd.arguments!Args(_args);
+    return cmd;
 }
 
 class OutputConfiguration {

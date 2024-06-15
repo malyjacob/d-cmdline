@@ -9,6 +9,8 @@ __gshared Regex!char PTN_VALUE;
 __gshared Regex!char PTN_SP;
 __gshared Regex!char PTN_NEGATE;
 __gshared Regex!char PTN_CMDNAMEANDARGS;
+__gshared Regex!char PTN_IMPLYMAPKEY;
+__gshared Regex!char PTN_MANUALINDENT;
 
 shared static this() {
     PTN_SHORT = regex(`^-\w$`, "g");
@@ -17,4 +19,16 @@ shared static this() {
     PTN_VALUE = regex(`(<[(\w\-)\w]+\w(\.{3})?>$)|(\[[(\w\-)\w]+\w(\.{3})?\]$)`, "g");
     PTN_SP = regex(`[ |,]+`);
     PTN_CMDNAMEANDARGS = regex(`([^ ]+) *(.*)`, "g");
+    PTN_IMPLYMAPKEY = regex(`([(?:\w\-)\w]+\w)\:((\w+)(\[\])?)`, "g");
+    PTN_MANUALINDENT = regex("[\\n][ \\f\\t\\v\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]+");
+}
+
+unittest {
+    import std.stdio;
+    auto str1 = "maly-flag:int";
+    auto cp1 = matchFirst(str1, PTN_IMPLYMAPKEY);
+    writeln(cp1);
+    auto str2 = "maly:string[]";
+    auto cp2 = matchFirst(str2, PTN_IMPLYMAPKEY);
+    writeln(cp2);
 }
