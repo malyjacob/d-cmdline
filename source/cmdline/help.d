@@ -5,11 +5,14 @@ import std.array;
 import std.string : stripRight;
 import std.regex;
 import std.format;
+import std.typecons;
+import std.uni;
 
 import cmdline.pattern;
 import cmdline.option;
 import cmdline.argument;
 import cmdline.command;
+import core.stdcpp.array;
 
 class Help {
     int helpWidth = 80;
@@ -19,7 +22,7 @@ class Help {
     bool showGlobalOptions = false;
 
     inout(Command)[] visibleCommands(inout(Command) cmd) const {
-        auto cmd_tmp = cast(Command) cmd;
+        Command cmd_tmp = cast(Command) cmd;
         Command[] visible_cmds = cmd_tmp._commands.filter!(c => !c._hidden).array;
         auto help_cmd = cmd_tmp._getHelpCommand();
         auto version_cmd = cmd_tmp._versionCommand;
@@ -38,6 +41,7 @@ class Help {
     inout(Option)[] visibleOptions(inout(Command) command) const {
         auto cmd = cast(Command) command;
         Option[] visible_opts = (cmd._options).filter!(opt => !opt.hidden).array;
+        visible_opts ~= cmd._abandons.filter!(opt => !opt.hidden).array;
         auto help_opt = cmd._getHelpOption();
         auto version_opt = cmd._versionOption;
         auto config_opt = cmd._configOption;
@@ -68,8 +72,10 @@ class Help {
         auto cmds_global = command._getCommandAndAncestors();
         auto ancestor_cmd = (cast(Command[]) cmds_global)[1 .. $];
         Option[] visible_opts = [];
-        foreach (cmd; ancestor_cmd)
+        foreach (cmd; ancestor_cmd) {
             visible_opts ~= (cmd._options).filter!(opt => !opt.hidden).array;
+            visible_opts ~= cmd._abandons.filter!(opt => !opt.hidden).array;
+        }
         if (this.sortOptions) {
             return cast(inout(Option[])) visible_opts.sort!((a, b) => a.name < b.name).array;
         }
@@ -322,4 +328,93 @@ class Help {
         }
         return leading_str ~ tmp.join("\n");
     }
+}
+
+private:
+
+enum int maxDistance = 3;
+
+int _editDistance(string a, string b) {
+    assert(max(a.length, b.length) < 20);
+    int xy = cast(int) a.length - cast(int) b.length;
+    if (xy < -maxDistance || xy > maxDistance) {
+        return cast(int) max(a.length, b.length);
+    }
+    int[20][20] dp = (int[20][20]).init;
+    for (int i = 0; i <= a.length; i++)
+        dp[i][0] = i;
+    for (int i = 0; i <= b.length; i++)
+        dp[0][i] = i;
+    int cost = 0;
+    for (int i = 1; i <= a.length; i++) {
+        for (int j = 1; j <= b.length; j++) {
+            if (a[i - 1] == b[j - 1])
+                cost = 0;
+            else
+                cost = 1;
+            dp[i][j] = min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+        }
+    }
+    return dp[a.length][b.length];
+}
+
+public:
+
+string suggestSimilar(string word, in string[] _candidates) {
+    if (!_candidates || _candidates.length == 0)
+        return "";
+    auto searching_opts = word[0 .. 2] == "--";
+    string[] candidates;
+    if (searching_opts) {
+        word = word[2 .. $].idup;
+        candidates = _candidates.map!(candidate => candidate[2 .. $].idup).array;
+    }
+    else {
+        candidates = _candidates.dup;
+    }
+    string[] similar = [];
+    int best_dist = maxDistance;
+    double min_similarity = 0.4;
+    candidates.each!((string candidate) {
+        if (candidates.length <= 1)
+            return No.each;
+        double dist = _editDistance(word, candidate);
+        double len = cast(double) max(word.length, candidate.length);
+        double similarity = (len - dist) / len;
+        if (similarity > min_similarity) {
+            if (dist < best_dist) {
+                best_dist = cast(int) dist;
+                similar ~= candidate;
+            }
+            else if (dist == best_dist) {
+                similar ~= candidate;
+            }
+        }
+        return Yes.each;
+    });
+    similar.sort!((a, b) => a.toLower < b.toLower);
+    if (searching_opts) {
+        similar.each!((ref str) { str = "--" ~ str; });
+    }
+    if (similar.length > 1)
+        return format("\n(Did you mean one of %s?)", similar.join(", "));
+    if (similar.length == 1)
+        return format("\n(Did you mean %s?)", similar[0]);
+    return "";
+}
+
+unittest {
+    import std.stdio;
+
+    writeln("===:", suggestSimilar("--son", [
+        "--sone", "--sans", "--sou", "--don"
+    ]));
+    assert(_editDistance("kitten", "sitting") == 3);
+    assert(_editDistance("rosettacode", "raisethysword") == 8);
+    assert(_editDistance("", "") == 0);
+    assert(_editDistance("kitten", "") == 6);
+    assert(_editDistance("", "sitting") == 7);
+    assert(_editDistance("kitten", "kitten") == 0);
+    assert(_editDistance("meow", "woof") == 3);
+    assert(_editDistance("woof", "meow") == 3);
 }

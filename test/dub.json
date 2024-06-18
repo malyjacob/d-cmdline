@@ -1,0 +1,15 @@
+{
+    "name": "test",
+    "dependencies": {
+        "cmdline": {
+            "path": "../",
+            "version": "*"
+        }
+    },
+    "targetType": "executable",
+    "targetName": "multi",
+    "targetPath": ".",
+    "version": "0.0.1",
+    "sourcePaths": ["."],
+	"dflags": ["-preview=in"]
+}

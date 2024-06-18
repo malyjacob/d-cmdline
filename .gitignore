@@ -16,3 +16,4 @@ cmdline-test-*
 *.lst
 
 build
+.vscode

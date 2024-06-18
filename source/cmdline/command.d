@@ -29,12 +29,15 @@ enum AddHelpPos : string {
     AfterAll = "afterAll"
 }
 
+alias ActionCallback = void delegate(ArgVariant[], OptionVariant[string]);
+
 class Command : EventManager {
     Command parent = null;
     Command[] _commands = [];
 
     Option[] _options = [];
     NegateOption[] _negates = [];
+    Option[] _abandons = [];
 
     Argument[] _arguments = [];
 
@@ -43,7 +46,7 @@ class Command : EventManager {
     string[] _aliasNames = [];
     string _selfPath = "";
 
-    string _version = "";
+    string _version = "*";
     string _usage = "";
 
     string _description = "";
@@ -57,7 +60,8 @@ class Command : EventManager {
     string[] argFlags = [];
     string[] errorFlags = [];
     string[] unknownFlags = [];
-    string sub = "";
+
+    Command subCommand = null;
 
     ArgVariant[] args = [];
     OptionVariant[string] opts = null;
@@ -67,9 +71,9 @@ class Command : EventManager {
     bool _showSuggestionAfterError = true;
     bool _combineFlagAndOptionalValue = true;
 
-    void function(CMDLineError) _exitCallback = null;
+    void function(CMDLineError) _exitCallback = (CMDLineError err) { throw err; };
     void delegate() _actionHandler = null;
-    Help _helpConfiguration = null;
+    Help _helpConfiguration = new Help;
     OutputConfiguration _outputConfiguration = new OutputConfiguration();
 
     bool _hidden = false;
@@ -197,7 +201,7 @@ class Command : EventManager {
                         new_cmd_names, help_cmd_names));
             }
         }
-        else {
+        else if (this._addImplicitHelpCommand) {
             string help_cmd_names = "help";
             if (auto num = knownBy(command).count(help_cmd_names)) {
                 string new_cmd_names = knownBy(command).join("|");
@@ -220,42 +224,53 @@ class Command : EventManager {
                         new_cmd_names, version_cmd_names));
             }
         }
+        command.parent = this;
         this._commands ~= command;
     }
 
     void _registerOption(Option option) {
-        Option short_opt = option.shortFlag != "" ? this._findOption(option.shortFlag) : null;
-        Option long_opt = option.longFlag != "" ? this._findOption(option.longFlag) : null;
-        Option match_opt = (short_opt is null) ? long_opt : short_opt;
-        if (match_opt) {
-            auto match_flag = option.longFlag != "" && this._findOption(option.longFlag)
-                ? option.longFlag : option.shortFlag;
+        Option match_lopt = this._findOption(option.longFlag);
+        Option match_sopt = this._findOption(option.shortFlag);
+        NegateOption match_nopt = this._findNegateOption(option.shortFlag);
+        if (match_lopt) {
+            string match_flags = match_lopt is match_sopt ? match_lopt.flags : match_lopt.longFlag;
             throw new CMDLineError(
                 format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
-                    option.flags, this._name, match_flag
+                    option.flags, match_flags, match_lopt.flags
+            ));
+        }
+        if (match_sopt && match_sopt !is match_lopt) {
+            auto match_flags = option.shortFlag;
+            throw new CMDLineError(
+                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                    option.flags, match_flags, match_sopt.flags
+            ));
+        }
+        if (match_nopt) {
+            string match_flags = match_nopt.shortFlag;
+            throw new CMDLineError(
+                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                    option.flags, match_flags, match_nopt.flags
             ));
         }
         if (auto help_option = this._helpOption) {
-            if (help_option.shortFlag == option.shortFlag || help_option.longFlag == option
-                .longFlag) {
+            if (option.matchFlag(help_option)) {
                 throw new CMDLineError(format!"Cannot add option '%s'
                     due to confliction help option `%s`"(option.flags, help_option.flags));
             }
         }
-        else if (option.shortFlag == "-h" || option.longFlag == "--help") {
+        else if (this._addImplicitHelpOption && (option.shortFlag == "-h" || option.longFlag == "--help")) {
             throw new CMDLineError(format!"Cannot add option '%s'
                     due to confliction help option `%s`"(option.flags, "-h, --help"));
         }
         if (auto version_option = this._versionOption) {
-            if (version_option.shortFlag == option.shortFlag || version_option.longFlag == option
-                .longFlag) {
+            if (option.matchFlag(version_option)) {
                 throw new CMDLineError(format!"Cannot add option '%s'
                     due to confliction version option `%s`"(option.flags, version_option.flags));
             }
         }
         if (auto config_option = this._configOption) {
-            if (config_option.shortFlag == option.shortFlag || config_option.longFlag == option
-                .longFlag) {
+            if (option.matchFlag(config_option)) {
                 throw new CMDLineError(format!"Cannot add option '%s'
                     due to confliction config option `%s`"(option.flags, config_option.flags));
             }
@@ -264,35 +279,46 @@ class Command : EventManager {
     }
 
     void _registerOption(NegateOption option) {
-        NegateOption short_opt = option.shortFlag != "" ? this._findNegateOption(
-            option.shortFlag) : null;
-        NegateOption long_opt = option.longFlag != "" ? this._findNegateOption(
-            option.longFlag) : null;
-        NegateOption match_opt = (short_opt is null) ? long_opt : short_opt;
-        if (match_opt) {
-            auto match_flag = option.longFlag != "" && this._findNegateOption(option.longFlag)
-                ? option.longFlag : option.shortFlag;
+        NegateOption match_lopt = this._findNegateOption(option.longFlag);
+        NegateOption match_sopt = this._findNegateOption(option.shortFlag);
+        Option match_opt = this._findOption(option.shortFlag);
+        if (match_lopt) {
+            string match_flags = match_lopt is match_sopt ? match_lopt.flags : match_lopt.longFlag;
             throw new CMDLineError(
-                format!"Cannot add option `%s` due to conflicting flag `%s` - already ued by option `%s`"(
-                    option.flags, this._name, match_flag
+                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                    option.flags, match_flags, match_lopt.flags
+            ));
+        }
+        if (match_sopt && match_sopt !is match_lopt) {
+            auto match_flags = option.shortFlag;
+            throw new CMDLineError(
+                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                    option.flags, match_flags, match_sopt.flags
+            ));
+        }
+        if (match_opt) {
+            auto match_flags = match_opt.shortFlag;
+            throw new CMDLineError(
+                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                    option.flags, match_flags, match_opt.flags
             ));
         }
         if (auto help_option = this._helpOption) {
-            if (help_option.name == option.name)
+            if (option.matchFlag(help_option))
                 throw new CMDLineError(format!"Cannot add negate-option '%s'
                     due to confliction help option `%s`"(option.flags, help_option.flags));
         }
-        else if (option.name == "help") {
+        else if (this._addImplicitHelpOption && (option.shortFlag == "-h" || option.longFlag == "--no-help")) {
             throw new CMDLineError(format!"Cannot add negate-option '%s'
                     due to confliction help option `%s`"(option.flags, "-h, --help"));
         }
         if (auto version_option = this._versionOption) {
-            if (version_option.name == option.name)
+            if (option.matchFlag(version_option))
                 throw new CMDLineError(format!"Cannot add negate-option '%s'
                     due to confliction version option `%s`"(option.flags, version_option.flags));
         }
         if (auto config_option = this._configOption) {
-            if (config_option.name == option.name) {
+            if (option.matchFlag(config_option)) {
                 throw new CMDLineError(format!"Cannot add negate-option '%s'
                     due to confliction config option `%s`"(option.flags, config_option.flags));
             }
@@ -302,15 +328,82 @@ class Command : EventManager {
 
     Self addOption(Option option) {
         this._registerOption(option);
-        this.on("option:" ~ option.name, (string val, string[] vals...) {
-            // auto invalid_msg = format!"error: option `%s` argument `%s` is invalid."(option.flags, val);
-            setOptionVal!(Source.Cli)(option.name, val, vals);
-        });
+        bool is_required = option.isRequired;
+        bool is_optional = option.isOptional;
+        bool is_variadic = option.variadic;
+        string name = option.name;
+        if (is_required) {
+            if (is_variadic) {
+                this.on("option:" ~ name, (string[] vals) {
+                    assert(vals.length);
+                    setOptionVal!(Source.Cli)(name, vals);
+                });
+            }
+            else {
+                this.on("option:" ~ name, (string val) {
+                    setOptionVal!(Source.Cli)(name, val);
+                });
+            }
+        }
+        else if (is_optional) {
+            if (is_variadic) {
+                this.on("option:" ~ name, (string[] vals) {
+                    if (vals.length)
+                        setOptionVal!(Source.Cli)(name, vals);
+                    else
+                        option.found = true;
+                });
+            }
+            else {
+                this.on("option:" ~ name, (string val) {
+                    setOptionVal!(Source.Cli)(name, val);
+                });
+                this.on("option:" ~ name, () { option.found = true; });
+            }
+        }
+        else {
+            this.on("option:" ~ name, () { option.found = true; });
+        }
         return this;
     }
 
     Self addOption(NegateOption option) {
+        auto opt = _findOption(option.name);
+        if (!opt) {
+            opt = createOption("--" ~ option.name, "see also option " ~ option.flags).defaultVal();
+            _registerOption(opt);
+            _registerOption(option);
+            this.on("negate:" ~ option.name, () {
+                setOptionValDirectly(option.name, false, Source.Imply);
+            });
+        }
+        else {
+            _registerOption(option);
+            if (opt.isBoolean)
+                this.on("negate:" ~ option.name, () {
+                    setOptionValDirectly(option.name, false, Source.Imply);
+                });
+            else
+                this.on("negate:" ~ option.name, () {
+                    this._options = this._options.remove!(ele => ele is opt);
+                    this._abandons ~= opt;
+                });
+        }
+        return this;
+    }
+
+    Self addActionOption(Option option, void delegate(string[] vals...) call_back) {
         this._registerOption(option);
+        string name = option.name;
+        this.on("option:" ~ name, () { call_back(); this._exitSuccessfully(); });
+        this.on("option:" ~ name, (string str) {
+            call_back(str);
+            this._exitSuccessfully();
+        });
+        this.on("option:" ~ name, (string[] strs) {
+            call_back(strs);
+            this._exitSuccessfully();
+        });
         return this;
     }
 
@@ -321,12 +414,33 @@ class Command : EventManager {
         return this.addOption(option);
     }
 
+    Self _optionImpl(string flags, string desc) {
+        auto lflag = splitOptionFlags(flags).longFlag;
+        auto is_negate = !matchFirst(lflag, PTN_NEGATE).empty;
+        if (is_negate) {
+            auto nopt = createNOption(flags, desc);
+            return this.addOption(nopt);
+        }
+        else {
+            auto opt = createOption(flags, desc);
+            return this.addOption(opt);
+        }
+    }
+
     Self option(T)(string flags, string desc) {
         return _optionImpl!(T)(flags, desc);
     }
 
+    Self option(string flags, string desc) {
+        return _optionImpl(flags, desc);
+    }
+
     Self requiredOption(T)(string flags, string desc) {
         return _optionImpl!(T, true)(flags, desc);
+    }
+
+    Self requireOption(string flags, string desc) {
+        return _optionImpl!(bool, true)(flags, desc);
     }
 
     Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
@@ -403,11 +517,13 @@ class Command : EventManager {
         auto opt = this._findOption(key);
         assert(opt);
         opt.cliVal(value, rest);
+        opt.found = true;
         return this;
     }
 
     Self setOptionVal(Source src : Source.Cli, T:
-        string)(string key, T values...) {
+        string)(string key, T[] values) {
+        assert(values.length);
         return this.setOptionVal!src(key, values[0], values[1 .. $]);
     }
 
@@ -497,6 +613,366 @@ class Command : EventManager {
         throw new CMDLineError;
     }
 
+    void parse(in string[] argv) {
+        auto user_argv = _prepareUserArgs(argv);
+        _parseCommand(user_argv);
+    }
+
+    string[] _prepareUserArgs(in string[] args) {
+        auto arr = args.filter!(str => str.length).array;
+        this._selfPath = arr[0];
+        this.rawFlags = arr.dup;
+        return args[1 .. $].dup;
+    }
+
+    void _parseCommand(in string[] unknowns) {
+        auto parsed = this.parseOptions(unknowns);
+        this.argFlags = parsed[0];
+        this.unknownFlags = parsed[1];
+        this.parseArguments(parsed[0]);
+        this.parseOptionsEnv();
+        this.parseOptionsConfig();
+        this.parseOptionsImply();
+        this._options
+            .filter!(opt => opt.settled || opt.isValid)
+            .each!((opt) { opt.initialize; });
+        _checkMissingMandatoryOption();
+        _checkConfilctOption();
+        this.opts = this._options
+            .filter!(opt => opt.settled)
+            .map!(opt => tuple(opt.name, opt.get))
+            .assocArray;
+        if (this.subCommand)
+            this.subCommand._parseCommand(parsed[1]);
+        else
+            this.emit("action:" ~ this._name);
+    }
+
+    Tuple!(string[], string[]) parseOptions(in string[] argv) {
+        string[] operands = [];
+        string[] unknowns = [];
+
+        string[] _args = argv.dup;
+        auto maybe_opt = (string str) {
+            return (str.length > 1 && str[0] == '-' &&
+                    (str[1] == '-' || (str[1] >= 'A' && str[1] <= 'Z') ||
+                        (str[1] >= 'a' && str[1] <= 'z')));
+        };
+        auto get_front = (string[] strs) => strs.empty ? "" : strs.front;
+        auto find_cmd = (string str) {
+            auto _cmd = _findCommand(str);
+            auto vcmd = this._versionCommand;
+            auto hcmd = this._helpCommand;
+            _cmd = !_cmd && vcmd && vcmd._name == str ? vcmd : _cmd;
+            _cmd = !_cmd && hcmd && hcmd._name == str ? hcmd : _cmd;
+            _cmd = _cmd ? _cmd : (!hcmd && str == "help") ? this._getHelpCommand() : null;
+            return _cmd;
+        };
+        string[][string] variadic_val_map = null;
+        while (_args.length) {
+            auto arg = _args.front;
+            _args.popFront;
+
+            if (arg == "--") {
+                auto value = get_front(_args);
+                assert(value.length);
+                auto cmd = find_cmd(value);
+                while (!cmd && value.length) {
+                    operands ~= value;
+                    popFront(_args);
+                    value = get_front(_args);
+                    cmd = find_cmd(value);
+                }
+                if (cmd) {
+                    this.subCommand = cmd;
+                    popFront(_args);
+                    unknowns ~= _args;
+                }
+                break;
+            }
+
+            if (maybe_opt(arg)) {
+                auto opt = _findOption(arg);
+                auto nopt = _findNegateOption(arg);
+                if (opt) {
+                    auto name = opt.name;
+                    bool is_variadic = opt.variadic;
+                    if (opt.isRequired) {
+                        if (!is_variadic) {
+                            auto value = get_front(_args);
+                            if (value.empty || maybe_opt(value))
+                                this.optionMissingArgument(opt);
+                            this.emit("option:" ~ name, value);
+                            _args.popFront;
+                        }
+                        else {
+                            auto value = get_front(_args);
+                            string[] tmps = [];
+                            while (value.length && !maybe_opt(value)) {
+                                tmps ~= value;
+                                popFront(_args);
+                                value = get_front(_args);
+                            }
+                            auto ptr = name in variadic_val_map;
+                            if (ptr)
+                                *ptr ~= tmps;
+                            else
+                                variadic_val_map[name] = tmps;
+                        }
+                    }
+                    else if (opt.isOptional) {
+                        if (!is_variadic) {
+                            auto value = get_front(_args);
+                            if (value.empty || maybe_opt(value))
+                                this.emit("option:" ~ name);
+                            else {
+                                this.emit("option:" ~ name, value);
+                                _args.popFront;
+                            }
+                        }
+                        else {
+                            auto value = get_front(_args);
+                            string[] tmps = [];
+                            while (value.length && !maybe_opt(value)) {
+                                tmps ~= value;
+                                popFront(_args);
+                                value = get_front(_args);
+                            }
+                            auto ptr = name in variadic_val_map;
+                            if (ptr)
+                                *ptr ~= tmps;
+                            else
+                                variadic_val_map[name] = tmps;
+                        }
+                    }
+                    else {
+                        this.emit("option:" ~ name);
+                    }
+                    continue;
+                }
+                if (nopt) {
+                    this.emit("negate:" ~ nopt.name);
+                    continue;
+                }
+                if (Option help_opt = this._helpOption) {
+                    if (help_opt.isFlag(arg)) {
+                        this.emit("option:" ~ help_opt.name);
+                        continue;
+                    }
+                }
+                else if (this._addImplicitHelpOption) {
+                    if (arg == "-h" || arg == "help") {
+                        auto hopt = this._getHelpOption();
+                        this.emit("option:" ~ hopt.name);
+                        continue;
+                    }
+                }
+                if (Option vopt = this._versionOption) {
+                    if (vopt.isFlag(arg)) {
+                        this.emit("option:" ~ vopt.name);
+                        continue;
+                    }
+                }
+                if (Option copt = this._configOption) {
+                    if (copt.isFlag(arg)) {
+                        this.emit("option:" ~ copt.name);
+                        continue;
+                    }
+                }
+            }
+
+            if (arg.length > 2 && arg[0] == '-' && arg[1] != '-') {
+                Option opt = _findOption("-" ~ arg[1]);
+                string name = opt.name;
+                if (opt) {
+                    if (opt.isRequired || opt.isOptional) {
+                        bool is_variadic = opt.variadic;
+                        if (!is_variadic)
+                            this.emit("option:" ~ name, arg[2 .. $]);
+                        else {
+                            auto ptr = name in variadic_val_map;
+                            if (ptr)
+                                *ptr ~= arg[2 .. $];
+                            else
+                                variadic_val_map[name] = [arg[2 .. $]];
+                        }
+                    }
+                    else if (_combineFlagAndOptionalValue) {
+                        this.emit("option:" ~ name);
+                        _args.insertInPlace(0, arg[2 .. $]);
+                    }
+                    else {
+                        this.error("invalid value: `" ~ arg[2 .. $] ~ "` for bool option " ~ opt
+                                .flags);
+                    }
+                    continue;
+                }
+            }
+
+            auto cp = matchFirst(arg, PTN_LONGASSIGN);
+            if (cp.length) {
+                Option opt = _findOption(cp[1]);
+                string value = cp[2];
+                if (opt) {
+                    if (opt.isRequired || opt.isOptional) {
+                        bool is_variadic = opt.variadic;
+                        if (!is_variadic)
+                            this.emit("option:" ~ name, value);
+                        else {
+                            auto ptr = name in variadic_val_map;
+                            if (ptr)
+                                *ptr ~= value;
+                            else
+                                variadic_val_map[name] = [value];
+                        }
+                    }
+                    else
+                        this.error("invalid value: `" ~ value ~ "` for bool option " ~ opt.flags);
+                    continue;
+                }
+            }
+
+            if (auto _cmd = find_cmd(arg)) {
+                writeln("CMD_NAME:\t", _cmd._name);
+                this.subCommand = _cmd;
+                unknowns ~= _args;
+                break;
+            }
+
+            if (maybe_opt(arg))
+                unknownOption(arg);
+
+            operands ~= arg;
+        }
+        if (variadic_val_map) {
+            foreach (key, ref value; variadic_val_map)
+                this.emit("option:" ~ key, value);
+        }
+        variadic_val_map = null;
+        return tuple(operands, unknowns);
+    }
+
+    void optionMissingArgument(in Option opt) const {
+        string message = format("error: option '%s' argument missing", opt.flags);
+        this.error(message);
+    }
+
+    void unknownOption(string flag) const {
+        string suggestion = "";
+        string[] candidate_flags = [];
+        auto cmd = this;
+        const(string)[] more_flags;
+        auto hlp = cmd._helpConfiguration;
+        if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
+            more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
+            candidate_flags ~= more_flags;
+        }
+        else if (flag[0] == '-' && this._showSuggestionAfterError) {
+            more_flags = hlp.visibleOptions(cmd).filter!(opt => !opt.shortFlag.empty)
+                .map!(opt => opt.shortFlag)
+                .array;
+            candidate_flags ~= more_flags;
+        }
+        suggestion = suggestSimilar(flag, candidate_flags);
+        auto msg = format("error: unknown option `%s` %s", flag, suggestion);
+        this.error(msg, "command.unknownOption");
+    }
+
+    void excessArguments() const {
+        if (!this._allowExcessArguments) {
+            this.error("too much args!!!");
+        }
+    }
+
+    void _checkMissingMandatoryOption() const {
+        auto f = this._options.filter!(opt => opt.mandatory && !opt.settled).empty;
+        if (!f)
+            throw new CMDLineError;
+    }
+
+    void _checkConfilctOption() const {
+        auto opts = this._options
+            .filter!(opt => opt.settled)
+            .filter!(opt => !(opt.source == Source.Default || opt.source == Source.None || opt.source == Source
+                    .Imply))
+            .array;
+        auto is_conflict = (const Option opt) {
+            const string[] confilcts = opt.conflictsWith;
+            foreach (name; confilcts) {
+                opts.each!((o) {
+                    if (opt !is o && o.name == name)
+                        throw new CMDLineError;
+                });
+            }
+        };
+        opts.each!(is_conflict);
+    }
+
+    void parseArguments(in string[] _args) {
+        auto args = _args.dup;
+        auto get_front = () => args.empty ? "" : args.front;
+        foreach (argument; this._arguments) {
+            auto is_v = argument.variadic;
+            if (!is_v) {
+                auto value = get_front();
+                if (!value.length)
+                    break;
+                argument.cliVal(value);
+                popFront(args);
+            }
+            else {
+                if (!args.length)
+                    break;
+                argument.cliVal(args[0], args[1 .. $]);
+                args = [];
+                break;
+            }
+        }
+        if (args.length)
+            this.excessArguments();
+        this._arguments.each!((Argument arg) {
+            if (arg.isRequired && !arg.isValid)
+                throw new CMDLineError;
+        });
+        this.args = this._arguments
+            .filter!((Argument arg) { return !(arg.isOptional && !arg.isValid); })
+            .map!((Argument arg) { arg.initialize; return arg.get; })
+            .array;
+    }
+
+    void parseOptionsEnv() {
+        this._options.each!((Option opt) { opt.envVal(); });
+    }
+
+    void parseOptionsImply() {
+        auto set_imply = (Option option) {
+            auto imply_map = option.implyMap;
+            foreach (string key, OptionVariant value; imply_map) {
+                auto tmp = split(key, ':');
+                string name = tmp[0];
+                Option opt = _findOption(name);
+                if (opt && !opt.isValid)
+                    opt.implyVal(value);
+                if (opt && (opt.source == Source.Default)) {
+                    opt.settled = false;
+                    opt.implyVal(value);
+                }
+            }
+        };
+        this._options
+            .filter!(opt => opt.settled || opt.isValid)
+            .each!((opt) { opt.initialize; });
+        this._options
+            .filter!(opt => opt.settled)
+            .filter!(opt => !(opt.source == Source.Default || opt.source == Source.None || opt.source == Source
+                    .Imply))
+            .each!(set_imply);
+    }
+
+    void parseOptionsConfig() {
+        // next time to finish  it;
+    }
+
     Self name(string str) {
         this._name = str;
         return this;
@@ -507,20 +983,68 @@ class Command : EventManager {
     }
 
     Self setVersion(string str, string flags = "", string desc = "") {
+        assert(!this._versionOption);
+        assert(!this._versionCommand);
         this._version = str;
         flags = flags == "" ? "-V, --version" : flags;
         desc = desc == "" ? "output the version number" : desc;
-        this._versionOption = createOption(flags, desc);
-        this.on("option:" ~ _versionOption.name, () {
+        auto vopt = createOption(flags, desc);
+        if (auto help_opt = this._helpOption) {
+            if (vopt.matchFlag(help_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction help option `%s`"(vopt.flags, help_opt.flags));
+        }
+        else if (this._addImplicitHelpOption && (vopt.shortFlag == "-h" || vopt.longFlag == "--help")) {
+            throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction help option `%s`"(vopt.flags, "-h, --help"));
+        }
+        if (auto config_opt = this._configOption) {
+            if (vopt.matchFlag(config_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction config option `%s`"(vopt.flags, config_opt.flags));
+        }
+        this._versionOption = vopt;
+        string vname = this._versionOption.name;
+        this.on("option:" ~ vname, () {
             this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
-        Command cmd = createCommand("version").description("output the version number");
+        Command cmd = createCommand(vname).description(
+            "output the version number");
+        cmd.setHelpCommand(false);
+        cmd.setHelpCommand(false);
+        if (auto help_cmd = this._helpCommand) {
+            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
+            auto none = help_cmd_name_arr.find!(
+                name => vname == name).empty;
+            if (!none) {
+                string help_cmd_names = help_cmd_name_arr.join("|");
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        else if (this._addImplicitHelpCommand) {
+            string help_cmd_names = "help";
+            if (vname == help_cmd_names) {
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        this.on("command:" ~ vname, () {
+            this._outputConfiguration.writeOut(this._version ~ "\n");
+            this._exitSuccessfully();
+        });
+        ActionCallback fn = (args, optMap) {
+            this._outputConfiguration.writeOut(this._version ~ "\n");
+            this._exitSuccessfully();
+        };
         cmd.parent = this;
-        this.on("command:" ~ _versionOption.name, () {
-            this._outputConfiguration.writeOut(this._version ~ "\n");
-            this._exitSuccessfully();
-        });
+        cmd.action(fn);
+        this._versionCommand = cmd;
         return this;
     }
 
@@ -529,13 +1053,36 @@ class Command : EventManager {
     }
 
     Self setHelpCommand(string flags = "", string desc = "") {
+        assert(!this._helpCommand);
         flags = flags == "" ? "help [command]" : flags;
         desc = desc == "" ? "display help for command" : desc;
         Command help_cmd = createCommand!(string)(flags, desc);
         help_cmd.setHelpOption(false);
-        this._addImplicitHelpCommand = true;
+        help_cmd.setHelpCommand(false);
+        string hname = help_cmd._name;
+        if (auto verison_cmd = this._versionCommand) {
+            auto version_cmd_name_arr = verison_cmd._aliasNames ~ verison_cmd._name;
+            auto none = version_cmd_name_arr.find!(name => hname == name).empty;
+            if (!none) {
+                string version_cmd_names = version_cmd_name_arr.join("|");
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of version command `%s`"(
+                        hname, version_cmd_names));
+            }
+        }
+        ActionCallback fn = (args, optMap) {
+            if (args.length) {
+                auto sub_cmd_name = args[0].get!string;
+                auto sub_cmd = this._findCommand(sub_cmd_name);
+                sub_cmd.help();
+            }
+            this.help();
+        };
+        help_cmd.parent = this;
+        help_cmd.action(fn);
         this._helpCommand = help_cmd;
-        return this;
+        return setHelpCommand(true);
     }
 
     Self setHelpCommand(bool enable) {
@@ -544,9 +1091,24 @@ class Command : EventManager {
     }
 
     Self addHelpCommand(Command cmd) {
-        this._addImplicitHelpCommand = true;
+        assert(!this._helpCommand);
+        string[] hnames = cmd._aliasNames ~ cmd._name;
+        if (auto verison_cmd = this._versionCommand) {
+            auto version_cmd_name_arr = verison_cmd._aliasNames ~ verison_cmd._name;
+            auto none = version_cmd_name_arr.find!((name) {
+                return !hnames.find!(h => h == name).empty;
+            }).empty;
+            if (!none) {
+                string version_cmd_names = version_cmd_name_arr.join("|");
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of version command `%s`"(
+                        hnames.join("|"), version_cmd_names));
+            }
+        }
+        cmd.parent = this;
         this._helpCommand = cmd;
-        return this;
+        return setHelpCommand(true);
     }
 
     Self addHelpCommand(string flags = "", string desc = "") {
@@ -562,10 +1124,23 @@ class Command : EventManager {
     }
 
     Self setHelpOption(string flags = "", string desc = "") {
+        assert(!this._helpOption);
         flags = flags == "" ? "-h, --help" : flags;
         desc = desc == "" ? "display help for command" : desc;
-        this._helpOption = createOption(flags, desc);
-        return this;
+        auto hopt = createOption(flags, desc);
+        if (auto config_opt = this._configOption) {
+            if (hopt.matchFlag(config_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction config option `%s`"(hopt.flags, config_opt.flags));
+        }
+        if (auto version_opt = this._versionOption) {
+            if (hopt.matchFlag(version_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction version option `%s`"(hopt.flags, version_opt.flags));
+        }
+        this._helpOption = hopt;
+        this.on("option:" ~ hopt.name, () { this.help(); });
+        return setHelpOption(true);
     }
 
     Self setHelpOption(bool enable) {
@@ -574,8 +1149,10 @@ class Command : EventManager {
     }
 
     Self addHelpOption(Option option) {
+        assert(!this._helpOption);
         this._helpOption = option;
-        return this;
+        this.on("option:" ~ option.name, () { this.help(); });
+        return setHelpOption(true);
     }
 
     Self addHelpOption(string flags = "", string desc = "") {
@@ -615,11 +1192,12 @@ class Command : EventManager {
     void help(bool isErrorMode = false) {
         this.outputHelp(isErrorMode);
         if (isErrorMode)
-            this._exit("(outputHelp)", 1, "command.help");
+            this._exitErr("(outputHelp)", "command.help");
         this._exit(0);
     }
 
     Self addHelpText(AddHelpPos pos, string text) {
+        assert(this._addImplicitHelpCommand || this._addImplicitHelpOption);
         string help_event = pos.to!string ~ "Help";
         this.on(help_event, (bool isErrMode) {
             if (text.length) {
@@ -641,20 +1219,32 @@ class Command : EventManager {
         }
     }
 
-    Self action(alias fn)() {
+    Self action(ActionCallback fn) {
         auto listener = () {
-            auto args = this._arguments
-                .filter!(arg => arg.settled)
-                .map!(arg => arg.get)
-                .array;
-            auto options = this._options
-                .filter!(opt => opt.settled)
-                .map!(opt => tuple(opt.name, opt.get))
-                .assocArray;
-            fn(args, options);
+            ArgVariant[] args;
+            OptionVariant[string] opts;
+            if (this.args)
+                args = this.args;
+            else
+                this.args = args = this._arguments
+                    .filter!(arg => arg.settled)
+                    .map!(arg => arg.get)
+                    .array;
+            if (this.opts)
+                opts = this.opts;
+            else
+                this.opts = opts = this._options
+                    .filter!(opt => opt.settled)
+                    .map!(opt => tuple(opt.name, opt.get))
+                    .assocArray;
+            fn(args, opts);
             this._exitSuccessfully();
         };
         this._actionHandler = listener;
+        this.on("action:" ~ this._name, () {
+            if (this._actionHandler)
+                this._actionHandler();
+        });
         return this;
     }
 
@@ -712,6 +1302,9 @@ class Command : EventManager {
         auto args = this._arguments;
         Argument prev_arg = args.length ? args[$ - 1] : null;
         if (prev_arg && prev_arg.variadic) {
+            throw new CMDLineError;
+        }
+        if (prev_arg && prev_arg.isOptional && argument.isRequired) {
             throw new CMDLineError;
         }
         this._arguments ~= argument;
@@ -795,11 +1388,11 @@ class Command : EventManager {
         return this;
     }
 
-    void _exit(string msg, ubyte exitCode = 1, string code = "") const {
+    void _exitErr(string msg, string code = "") const {
         auto fn = this._exitCallback;
         if (fn)
-            fn(new CMDLineError(msg, exitCode, code));
-        this._exit(exitCode);
+            fn(new CMDLineError(msg, 1, code));
+        this._exit(1);
     }
 
     void _exitSuccessfully() const {
@@ -812,13 +1405,13 @@ class Command : EventManager {
         exit(exitCode);
     }
 
-    void error(string msg = "", string code = "command.error", ubyte exitCode = 1) {
+    void error(string msg = "", string code = "command.error", ubyte exitCode = 1) const {
         this._outputConfiguration.writeErr(msg ~ "\n");
         if (this._showHelpAfterError) {
             this._outputConfiguration.writeErr("\n");
             this.outputHelp(true);
         }
-        this._exit(msg, exitCode, code);
+        this._exitErr(msg, code);
     }
 
     string usage() const {
@@ -931,4 +1524,23 @@ unittest {
 
     OutputConfiguration outputConfig = new OutputConfiguration;
     assert(outputConfig.getOutHelpWidth() == _getOutHelpWidth());
+}
+
+unittest {
+    Command program = createCommand("program");
+    program.setVersion("0.0.1");
+    program.allowExcessArguments(false);
+    program.option("-f, --first <num>", "test", 13);
+    program.option("-s, --second <num>", "test", 12);
+    program.argument("[multi]", "乘数", 4);
+    program.action((args, optMap) {
+        auto fnum = optMap["first"].get!int;
+        auto snum = optMap["second"].get!int;
+        int multi = 1;
+        if (args.length)
+            multi = args[0].get!int;
+        writeln("ACTION:\t", (fnum + snum) * multi);
+    });
+
+    program.parse(["program"]);
 }

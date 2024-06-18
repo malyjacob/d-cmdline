@@ -1,0 +1,7 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"cmdline": {"path":"../"},
+		"mir-core": "1.7.1"
+	}
+}

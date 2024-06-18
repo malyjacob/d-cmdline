@@ -76,6 +76,13 @@ unittest {
     static assert(isOptionValueType!(string[]));
 }
 
+unittest {
+    alias test_bool = visit!((bool v) => true, (v) => false);
+    OptionVariant ov = 12;
+    OptionNullable on = ov;
+    assert(!test_bool(on));
+}
+
 class Option {
     string description;
     string defaultValueDescription;
@@ -99,6 +106,8 @@ class Option {
     string envKey;
     ImplyOptionMap implyMap;
 
+    OptionNullable innerImplyData;
+
     bool found;
     bool settled;
 
@@ -115,7 +124,8 @@ class Option {
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
-        assert(longFlag != "");
+        assert(longFlag.length);
+        assert((matchFirst(this.longFlag, PTN_NEGATE)).empty);
         this.variadic = (opt.valueFlag == "" || opt.valueFlag[$ - 2] != '.') ? false : true;
         this.valueName = opt.valueFlag == "" ? "" : this.variadic ? opt.valueFlag[1 .. $ - 4].idup
             : opt.valueFlag[1 .. $ - 1].idup;
@@ -127,15 +137,24 @@ class Option {
             this.optional = opt.valueFlag[0] == '[' ? true : false;
         }
         this.hidden = false;
-        // this.argChoices = [];
         this.conflictsWith = [];
         this.implyMap = null;
         this.envKey = "";
-
         this.found = false;
         this.settled = false;
-
         this.source = Source.None;
+        this.innerImplyData = null;
+    }
+
+    bool matchFlag(in Option other) const {
+        return this.longFlag == other.longFlag ||
+            (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
+    }
+
+    bool matchFlag(in NegateOption other) const {
+        auto short_flag = this.shortFlag;
+        auto nshort_flag = other.shortFlag;
+        return short_flag.empty ? false : short_flag == nshort_flag;
     }
 
     Self conflicts(string name) {
@@ -206,13 +225,12 @@ class Option {
 
     @property
     string envStr() const {
-        assert(this.envKey.length);
         auto raw = environment.get(this.envKey);
         return raw;
     }
 
     bool isFlag(string flag) const {
-        return this.shortFlag == flag || this.longFlag == flag;
+        return !flag.empty && (this.shortFlag == flag || this.longFlag == flag);
     }
 
     @property
@@ -232,27 +250,33 @@ class Option {
 
     // for being inhelited
     Self defaultVal() {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     Self configVal() {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     Self implyVal() {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     Self envVal() {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     Self preset() {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     Self cliVal(string value, string[] rest...) {
-        throw new OptionMemberFnCallError;
+        // throw new OptionMemberFnCallError;
+        return this;
     }
 
     @property
@@ -330,6 +354,11 @@ class Option {
     Self configVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
         return configVal(values[0], cast(T[]) values[1 .. $]);
+    }
+
+    Self implyVal(OptionVariant value) {
+        this.innerImplyData = value;
+        return this;
     }
 
     Self implyVal(T)(T value) if (isBaseOptionValueType!T) {
@@ -527,6 +556,10 @@ Option createOption(T : U[], U)(string flags, string desc = "")
     return createOption!U(flags, desc);
 }
 
+NegateOption createNOption(string flags, string desc = "") {
+    return new NegateOption(flags, desc);
+}
+
 unittest {
     Option[] opts = [
         new BoolOption("-m, --mixed", ""),
@@ -628,7 +661,7 @@ class BoolOption : Option {
     @property
     override bool isValid() const {
         return this.found || !this.implyArg.isNull
-            || !this.configArg.isNull || !this.defaultArg.isNull;
+            || !this.configArg.isNull || !this.defaultArg.isNull || !this.innerImplyData.isNull;
     }
 
     override Self initialize() {
@@ -643,6 +676,11 @@ class BoolOption : Option {
         }
         if (!this.implyArg.isNull) {
             this.innerData = this.implyArg.get;
+            this.source = Source.Imply;
+            return this;
+        }
+        if (!this.innerImplyData.isNull) {
+            this.innerData = this.innerImplyData.get!bool;
             this.source = Source.Imply;
             return this;
         }
@@ -827,6 +865,8 @@ class ValueOption(T) : Option {
     }
 
     override Self envVal() {
+        if (this.envStr.empty)
+            return this;
         auto tmp = this.parseFn(this.envStr);
         _checkVal(tmp);
         this.envArg = tmp;
@@ -849,7 +889,7 @@ class ValueOption(T) : Option {
     override bool isValid() const {
         return this.found ? (!this.presetArg.isNull || !this.cliArg.isNull) : (!this.envArg.isNull || !this
                 .implyArg.isNull || !this.configArg.isNull || !this
-                .defaultArg.isNull);
+                .defaultArg.isNull || !this.innerImplyData.isNull);
     }
 
     override Self initialize() {
@@ -857,8 +897,8 @@ class ValueOption(T) : Option {
             return this;
         assert(this.isValid);
         this.settled = true;
-        alias test_bool = visit!((bool v) => true, (T v) => false);
-        alias test_t = visit!((T v) => true, (bool v) => false);
+        alias test_bool = visit!((bool v) => true, (v) => false);
+        alias test_t = visit!((T v) => true, (v) => false);
         if (this.found) {
             if (!this.cliArg.isNull) {
                 this.innerValueData = this.cliArg.get!T;
@@ -889,6 +929,14 @@ class ValueOption(T) : Option {
                 this.innerValueData = this.implyArg.get!T;
             this.source = Source.Imply;
             return this;
+        }
+        if (!this.innerImplyData.isNull) {
+            if (test_bool(this.innerImplyData)) {
+                this.isValueData = false;
+                this.innerBoolData = this.innerImplyData.get!bool;
+            }
+            if (test_t(this.innerImplyData))
+                this.innerValueData = this.innerImplyData.get!T;
         }
         if (!this.configArg.isNull) {
             if (test_bool(this.configArg)) {
@@ -1135,6 +1183,8 @@ class VariadicOption(T) : Option {
     }
 
     override Self envVal() {
+        if (this.envStr.empty)
+            return this;
         string[] str_arr = split(this.envStr, regex(`;`)).filter!(v => v != "").array;
         auto fn = parseFn;
         auto tmp = str_arr.map!(fn).array;
@@ -1160,7 +1210,7 @@ class VariadicOption(T) : Option {
     override bool isValid() const {
         return this.found ? (!this.presetArg.isNull || !this.cliArg.isNull) : (!this.envArg.isNull || !this
                 .implyArg.isNull || !this.configArg.isNull || !this
-                .defaultArg.isNull);
+                .defaultArg.isNull || !this.innerImplyData.isNull);
     }
 
     override Self initialize() {
@@ -1168,8 +1218,8 @@ class VariadicOption(T) : Option {
             return this;
         assert(this.isValid);
         this.settled = true;
-        alias test_bool = visit!((T[] v) => false, (bool v) => true);
-        alias test_t = visit!((T[] v) => true, (bool v) => false);
+        alias test_bool = visit!((bool v) => true, (v) => false);
+        alias test_t = visit!((T[] v) => true, (v) => false);
         if (this.found) {
             if (!this.cliArg.isNull) {
                 this.innerValueData = this.cliArg.get!(T[]);
@@ -1197,6 +1247,16 @@ class VariadicOption(T) : Option {
                 this.innerBoolData = this.implyArg.get!bool;
             }
             if (test_t(this.implyArg))
+                this.innerValueData = this.implyArg.get!(T[]);
+            this.source = Source.Imply;
+            return this;
+        }
+        if (!this.innerImplyData.isNull) {
+            if (test_bool(this.innerImplyData)) {
+                this.isValueData = false;
+                this.innerBoolData = this.innerImplyData.get!bool;
+            }
+            if (test_t(this.innerImplyData))
                 this.innerValueData = this.implyArg.get!(T[]);
             this.source = Source.Imply;
             return this;
@@ -1322,6 +1382,17 @@ class NegateOption {
         assert(!(matchFirst(this.longFlag, PTN_NEGATE)).empty);
     }
 
+    bool matchFlag(in NegateOption other) const {
+        return this.longFlag == other.longFlag ||
+            (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
+    }
+
+    bool matchFlag(in Option other) const {
+        auto nshort_flag = this.shortFlag;
+        auto short_flag = other.shortFlag;
+        return short_flag.empty ? false : short_flag == nshort_flag;
+    }
+
     @property
     string name() const {
         return this.longFlag[5 .. $].idup;
@@ -1333,7 +1404,7 @@ class NegateOption {
     }
 
     bool isFlag(string flag) const {
-        return this.shortFlag == flag || this.longFlag == flag;
+        return !flag.empty && (this.shortFlag == flag || this.longFlag == flag);
     }
 }
 
@@ -1371,7 +1442,7 @@ unittest {
     assert(TestCamelCase!("Val-cc", "ValCc").flag);
 }
 
-private OptionFlags splitOptionFlags(string flags) {
+package OptionFlags splitOptionFlags(string flags) {
     string short_flag = "", long_flag = "", value_flag = "";
     string[] flag_arr = flags.split(PTN_SP);
     if (flag_arr.length > 3)

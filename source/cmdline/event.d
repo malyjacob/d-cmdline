@@ -3,39 +3,50 @@ module cmdline.event;
 import std.stdio;
 import cmdline.command;
 
-alias EventCallbaclk_1 = void delegate();
-alias EventCallbaclk_2 = void delegate(string val, string[] val...);
-alias EventCallbaclk_3 = void delegate(bool isErrMode);
+alias EventCallback_1 = void delegate();
+alias EventCallback_2 = void delegate(string val);
+alias EventCallback_3 = void delegate(bool isErrMode);
+alias EventCallback_4 = void delegate(string[] vals);
 
 struct EventFn {
-    EventCallbaclk_1 _fn1;
-    EventCallbaclk_2 _fn2;
-    EventCallbaclk_3 _fn3;
+    EventCallback_1 _fn1;
+    EventCallback_2 _fn2;
+    EventCallback_3 _fn3;
+    EventCallback_4 _fn4;
 
     void opCall() const {
         _fn1();
     }
 
-    void opCall(string val, string[] vals...) const {
-        _fn2(val, vals);
+    void opCall(string val) const {
+        _fn2(val);
     }
 
     void opCall(bool isErrMode) const {
         _fn3(isErrMode);
     }
 
-    auto opAssign(EventCallbaclk_1 value) {
+    void opCall(string[] vals) const {
+        _fn4(vals);
+    }
+
+    auto opAssign(EventCallback_1 value) {
         this._fn1 = value;
         return this;
     }
 
-    auto opAssign(EventCallbaclk_2 value) {
+    auto opAssign(EventCallback_2 value) {
         this._fn2 = value;
         return this;
     }
 
-    auto opAssign(EventCallbaclk_3 value) {
+    auto opAssign(EventCallback_3 value) {
         this._fn3 = value;
+        return this;
+    }
+
+    auto opAssign(EventCallback_4 value) {
+        this._fn4 = value;
         return this;
     }
 }
@@ -47,38 +58,56 @@ private:
 public:
     alias Self = typeof(this);
 
-    Self on(string eventName, EventCallbaclk_1 callback) {
+    Self on(string eventName, EventCallback_1 callback) {
         auto ptr = eventName in eventMap;
-        assert(!ptr);
+        assert(!ptr || (*ptr)._fn1 is null);
         EventFn fn;
         eventMap[eventName] = fn = callback;
         return this;
     }
 
-    Self on(string eventName, EventCallbaclk_2 callback) {
+    Self on(string eventName, EventCallback_2 callback) {
         auto ptr = eventName in eventMap;
-        assert(!ptr);
-        EventFn fn;
-        eventMap[eventName] = fn = callback;
-        eventMap[eventName] = callback;
-        return this;
-    }
-
-    Self on(string eventName, EventCallbaclk_3 callback) {
-        auto ptr = eventName in eventMap;
-        assert(!ptr);
+        assert(!ptr || (*ptr)._fn2 is null);
         EventFn fn;
         eventMap[eventName] = fn = callback;
         eventMap[eventName] = callback;
         return this;
     }
 
-    bool emit(string eventName, string val, string[] vals...) const {
+    Self on(string eventName, EventCallback_3 callback) {
+        auto ptr = eventName in eventMap;
+        assert(!ptr || (*ptr)._fn3 is null);
+        EventFn fn;
+        eventMap[eventName] = fn = callback;
+        eventMap[eventName] = callback;
+        return this;
+    }
+
+    Self on(string eventName, EventCallback_4 callback) {
+        auto ptr = eventName in eventMap;
+        assert(!ptr || (*ptr)._fn4 is null);
+        EventFn fn;
+        eventMap[eventName] = fn = callback;
+        eventMap[eventName] = callback;
+        return this;
+    }
+
+    bool emit(string eventName, string val) const {
         auto fn_ptr = eventName in eventMap;
         if (!fn_ptr)
             return false;
         auto fn = *fn_ptr;
-        fn(val, vals);
+        fn(val);
+        return true;
+    }
+
+    bool emit(string eventName, string[] vals) const {
+        auto fn_ptr = eventName in eventMap;
+        if (!fn_ptr)
+            return false;
+        auto fn = *fn_ptr;
+        fn(vals);
         return true;
     }
 
@@ -100,7 +129,7 @@ public:
         return true;
     }
 
-    bool remove(string eventName) {
+    bool removeEvent(string eventName) {
         return this.eventMap.remove(eventName);
     }
 }
