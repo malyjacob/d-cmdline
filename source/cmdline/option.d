@@ -84,7 +84,7 @@ unittest {
 }
 
 class Option {
-    string description;
+    string _description;
     string defaultValueDescription;
 
     bool mandatory;
@@ -118,7 +118,7 @@ class Option {
 
     this(string flags, string description) {
         this.flags = flags;
-        this.description = description;
+        this._description = description;
         this.mandatory = false;
         this.defaultValueDescription = "";
         auto opt = splitOptionFlags(flags);
@@ -146,6 +146,16 @@ class Option {
         this.innerImplyData = null;
     }
 
+
+    string description() const {
+        return "description: " ~ this._description;
+    }
+
+    Self description(string desc) {
+        this._description = desc;
+        return this;
+    }
+
     bool matchFlag(in Option other) const {
         return this.longFlag == other.longFlag ||
             (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
@@ -167,12 +177,12 @@ class Option {
         return this;
     }
 
-    Self implies(string[] names...) {
+    Self implies(string[] names) {
         assert(names.length);
         foreach (name; names) {
             bool signal = false;
             foreach (k; implyMap.byKey) {
-                if (name == k[0 .. name.length]) {
+                if (name.length < k.length && name == k[0 .. name.length]) {
                     signal = true;
                     break;
                 }
@@ -187,7 +197,7 @@ class Option {
     Self implies(T)(string key, T value) if (isOptionValueType!T) {
         bool signal = false;
         foreach (k; implyMap.byKey) {
-            if (key == k[0 .. key.length]) {
+            if (key.length < k.length && key == k[0 .. key.length]) {
                 signal = true;
                 break;
             }
@@ -717,7 +727,7 @@ class BoolOption : Option {
         if (defaultArg.isNull)
             return "";
         else
-            return "default: " ~ this.get!bool
+            return "default: " ~ defaultArg.get!bool
                 .to!string;
     }
 }
@@ -816,6 +826,8 @@ class ValueOption(T) : Option {
         }
 
         override string rangeOfStr() const {
+            if (_min == int.min && _max == int.max)
+                return "";
             return "range: " ~ _min.to!string ~ " ~ " ~ _max.to!string;
         }
     }
@@ -1130,6 +1142,8 @@ class VariadicOption(T) : Option {
         }
 
         override string rangeOfStr() const {
+            if (_min == int.min && _max == int.max)
+                return "";
             return "range: " ~ _min.to!string ~ " ~ " ~ _max.to!string;
         }
     }

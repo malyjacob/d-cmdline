@@ -7,6 +7,7 @@ import std.regex;
 import std.format;
 import std.typecons;
 import std.uni;
+import std.range;
 
 import cmdline.pattern;
 import cmdline.option;
@@ -107,10 +108,7 @@ class Help {
                 }
             });
         }
-        if (!command._arguments.find!(arg => arg.description != "").empty) {
-            return command._arguments;
-        }
-        return [];
+        return command._arguments;
     }
 
     string subCommandTerm(in Command cmd) const {
@@ -119,7 +117,7 @@ class Help {
             args_str = cmd._arguments.map!(arg => arg.readableArgName).join(" ");
         return (
             cmd._name ~
-                (cmd._aliasNames.empty ? "" : cmd._aliasNames[0]) ~
+                (cmd._aliasNames.empty ? "" : "|" ~ cmd._aliasNames[0]) ~
                 (cmd._options.empty ? "" : " [options]") ~
                 (args_str == "" ? args_str : " " ~ args_str)
         );
@@ -139,20 +137,32 @@ class Help {
 
     int longestSubcommandTermLength(in Command cmd) const {
         return reduce!((int mn, command) {
-            return max(mn, cast(int) subCommandTerm(cmd).length);
+            return max(mn, cast(int) subCommandTerm(command).length);
         })(0, visibleCommands(cmd));
     }
 
     int longestOptionTermLength(in Command cmd) const {
-        return reduce!((int mn, opt) {
+        int opt_len = reduce!((int mn, opt) {
             return max(mn, cast(int) optionTerm(opt).length);
         })(0, visibleOptions(cmd));
+
+        int nopt_len = reduce!((int mn, opt) {
+            return max(mn, cast(int) optionTerm(opt).length);
+        })(0, visibleNegateOptions(cmd));
+
+        return max(opt_len, nopt_len);
     }
 
     int longestGlobalOptionTermLength(in Command cmd) const {
-        return reduce!((int mn, opt) {
+        int opt_len = reduce!((int mn, opt) {
             return max(mn, cast(int) optionTerm(opt).length);
         })(0, visibleGlobalOptions(cmd));
+
+        int nopt_len = reduce!((int mn, opt) {
+            return max(mn, cast(int) optionTerm(opt).length);
+        })(0, visibleGlobalNegateOptions(cmd));
+
+        return max(opt_len, nopt_len);
     }
 
     int longestArgumentTermLength(in Command cmd) const {
@@ -177,7 +187,7 @@ class Help {
     }
 
     string optionDesc(in Option opt) const {
-        string[] extraInfo = [];
+        string[] info = [opt.description];
         auto type_str = opt.typeStr();
         auto choices_str = opt.choicesStr();
         auto default_str = opt.defaultValStr();
@@ -186,18 +196,15 @@ class Help {
         auto imply_str = opt.implyOptStr();
         auto conflict_str = opt.conflictOptStr();
         auto rangeof_str = opt.rangeOfStr();
-        extraInfo ~= type_str;
-        extraInfo ~= default_str;
-        extraInfo ~= env_str;
-        extraInfo ~= preset_str;
-        extraInfo ~= rangeof_str;
-        extraInfo ~= choices_str;
-        extraInfo ~= imply_str;
-        extraInfo ~= conflict_str;
-        string str = extraInfo.filter!(str => !str.empty).join(", ");
-        if (extraInfo.length)
-            return opt.description ~ " " ~ str;
-        return opt.description;
+        info ~= type_str;
+        info ~= default_str;
+        info ~= env_str;
+        info ~= preset_str;
+        info ~= rangeof_str;
+        info ~= choices_str;
+        info ~= imply_str;
+        info ~= conflict_str;
+        return info.filter!(str => !str.empty).join('\n');
     }
 
     string optionDesc(in NegateOption opt) const {
@@ -205,47 +212,48 @@ class Help {
     }
 
     string argumentDesc(in Argument arg) const {
-        string[] extraInfo = [];
+        string[] info = [arg.description];
         auto type_str = arg.typeStr;
         auto default_str = arg.defaultValStr;
         auto rangeof_str = arg.rangeOfStr;
         auto choices_str = arg.choicesStr;
-        extraInfo ~= type_str;
-        extraInfo ~= default_str;
-        extraInfo ~= rangeof_str;
-        extraInfo ~= choices_str;
-        string str = extraInfo.filter!(str => !str.empty).join(", ");
-        if (extraInfo.length)
-            return arg.description ~ " " ~ str;
-        return arg.description;
+        info ~= type_str;
+        info ~= default_str;
+        info ~= rangeof_str;
+        info ~= choices_str;
+        return info.filter!(str => !str.empty).join('\n');
     }
 
     string subCommandDesc(in Command cmd) const {
         return cmd.description;
     }
 
-    int padWidth(in Command cmd) const {
+    int paddWidth(in Command cmd) const {
+        auto lg_opl = longestOptionTermLength(cmd);
+        auto lg_gopl = longestGlobalOptionTermLength(cmd);
+        auto lg_scl = longestSubcommandTermLength(cmd);
+        auto lg_arl = longestArgumentTermLength(cmd);
         return max(
-            longestGlobalOptionTermLength(cmd),
-            longestGlobalOptionTermLength(cmd),
-            longestSubcommandTermLength(cmd),
-            longestArgumentTermLength(cmd)
+            lg_opl,
+            lg_gopl,
+            lg_scl,
+            lg_arl
         );
     }
 
     string formatHelp(in Command cmd) const {
-        auto term_width = padWidth(cmd);
+        auto term_width = paddWidth(cmd);
         auto item_indent_width = 2;
         auto item_sp_width = 2;
 
         auto format_item = (string term, string desc) {
             if (desc != "") {
-                auto pad_num = term_width + item_sp_width - term.length;
-                auto space = " ";
-                for (int i = 1; i < pad_num; i++) {
-                    space ~= space;
+                string padded_term_str = term;
+                if (term_width + item_sp_width > term.length) {
+                    auto pad_num = term_width + item_sp_width - term.length;
+                    string space = ' '.repeat(pad_num).array;
+                    padded_term_str = term ~ space;
                 }
-                auto padded_term_str = term ~ space;
                 auto full_text = padded_term_str ~ desc;
                 return this.wrap(
                     full_text,
@@ -256,13 +264,13 @@ class Help {
         };
 
         auto format_list = (string[] textArr) {
-            return textArr.join("\n").replaceAll(regex("^", "m"), "  ");
+            return textArr.join("\n").replaceAll(regex(`^`, "m"), "  ");
         };
 
         string[] output = ["Usage: " ~ this.commandUsage(cmd), ""];
 
         string cmd_desc = this.commandDesc(cmd);
-        if (cmd_desc.length) {
+        if (cmd_desc.length > 0) {
             output ~= [this.wrap(cmd_desc, this.helpWidth, 0), ""];
         }
 
@@ -301,32 +309,39 @@ class Help {
         return output.join("\n");
     }
 
-    string wrap(string str, int width, int indent, int minColumnWidth = 40) const {
-        if (matchFirst(str, PTN_MANUALINDENT)[0] != "")
+    string wrap(string str, int width, int indent) const {
+        if (!matchFirst(str, PTN_MANUALINDENT).empty)
             return str;
-        int col_width = width - indent;
-        if (col_width < minColumnWidth)
-            return str;
+        auto text = str[indent .. $].replaceAll(regex(`\s+(?=\n|$)`), "");
         auto leading_str = str[0 .. indent];
-        auto col_text = str[indent .. $].replaceFirst(regex("\\r\\n"), "\n");
-        auto indent_str = " ";
-        for (int i = 1; i < indent; i++) {
-            indent_str ~= indent_str;
+        int col_width = width - indent;
+        string indent_str = repeat(' ', indent).array;
+        string ex_indent_str = "  ";
+        string[] col_texts = text.split('\n').filter!(s => s.length).array;
+        auto get_front = () => col_texts.length ? col_texts.front : "";
+        string[] tmp;
+        string cur_txt = get_front();
+        if (cur_txt.length)
+            col_texts.popFront;
+        int cur_max_width = col_width;
+        bool is_ex_ing = cur_txt.length > cur_max_width;
+        if (is_ex_ing) {
+            col_texts.insertInPlace(0, cur_txt[cur_max_width .. $]);
+            cur_txt = cur_txt[0 .. cur_max_width];
         }
-        string breaks = "\\s\u200B";
-        auto re = regex(format("\\n|.{1, %d}([%s]|$)|[^%s]+?([%s]|$)",
-                col_width - 1, breaks, breaks, breaks), "g");
-        auto re_matches = col_text.matchAll(re);
-        string[] lines = re_matches.empty ?
-            [] : re_matches.map!(m => m.hit).array;
-        string[] tmp = [];
-        foreach (i, line; lines) {
-            if (line == "\n")
-                tmp ~= "";
-            else
-                tmp ~= (i > 0 ? indent_str : "") ~ stripRight(line);
+        tmp ~= cur_txt;
+        while ((cur_txt = get_front()).length) {
+            col_texts.popFront;
+            bool flag = is_ex_ing;
+            cur_max_width = is_ex_ing ? col_width - 2 : col_width;
+            is_ex_ing = cur_txt.length > cur_max_width;
+            if (is_ex_ing) {
+                col_texts.insertInPlace(0, cur_txt[cur_max_width .. $]);
+                cur_txt = cur_txt[0 .. cur_max_width];
+            }
+            tmp ~= flag ? ex_indent_str ~ indent_str ~ cur_txt : indent_str ~ cur_txt;
         }
-        return leading_str ~ tmp.join("\n");
+        return leading_str ~ tmp.join("\r\n");
     }
 }
 
@@ -418,3 +433,83 @@ unittest {
     assert(_editDistance("meow", "woof") == 3);
     assert(_editDistance("woof", "meow") == 3);
 }
+
+// unittest {
+
+//     Command program = createCommand("program");
+//     program.allowExcessArguments(false);
+//     program.setVersion("0.0.1");
+
+//     Option opt = createOption!string("-g, --greeting <str>");
+//     program.addActionOption(opt, (string[] vals...) {
+//         writeln("GREETING:\t", vals[0]);
+//     });
+//     program.option("-f, --first <num>", "test", 13);
+//     program.option("-s, --second <num>", "test", 12);
+//     program.argument("[multi]", "乘数", 4);
+//     program.action((args, optMap) {
+//         auto fnum = optMap["first"].get!int;
+//         auto snum = optMap["second"].get!int;
+//         int multi = 1;
+//         if (args.length)
+//             multi = args[0].get!int;
+//         writeln(format("%4d * (%4d + %4d) = %4d", multi, fnum, snum, (fnum + snum) * multi));
+//     });
+
+//     program
+//         .command("list")
+//         .aliasName("ls")
+//         .argument("[dir-path]", "dir path", ".")
+//         .option("-a, --all", "do not ignore entries starting with .")
+//         .option("-l, --long", "use a long listing format")
+//         .option("-s, --size", "print the allocated size of each file, in blocks", true)
+//         .action((args, opts) {
+//             auto dir = args[0].get!string;
+//             string l, a, s;
+//             if ("all" in opts)
+//                 a = opts["all"].get!bool ? "-a" : a;
+//             if ("long" in opts)
+//                 l = opts["long"].get!bool ? "-l" : l;
+//             if ("size" in opts)
+//                 s = opts["size"].get!bool ? "-s" : s;
+//             auto flags = (["ls"] ~ [l, a, s, dir]).filter!(str => str.length).array.join(" ");
+//             writeln("RUNNING:\t", flags);
+//             auto result = executeShell(flags);
+//             writeln(result[1]);
+//         });
+
+//     program
+//         .command!(string, string)("greet <name> [greetings...]")
+//         .aliasName("grt")
+//         .action((args, opts) {
+//             string name = args[0].get!string;
+//             string[] greetings;
+//             if (args.length > 1) {
+//                 greetings = args[1].get!(string[]);
+//             }
+//             writeln(format("hello %s, %s", name, greetings.join(", ")));
+//         });
+
+//     Option header_opt = createOption!string("-H, --header <header-str>");
+//     header_opt.env("HEADER");
+
+//     program
+//         .command("calculate")
+//         .aliasName("cal")
+//         .argument("tag", "tag", "Tag")
+//         .option!int("-m, --multi <value>", "multi value")
+//         .option!int("-n, --nums <numbers...>", "numbers value")
+//         .addOption(header_opt)
+//         .action((args, opts) {
+//             int multi = opts["multi"].get!int;
+//             int[] nums = opts["nums"].get!(int[]);
+//             string tag = args[0].get!string;
+//             string header = opts["header"].get!string;
+//             int result = reduce!((a, b) => a + b)(0, nums) * multi;
+//             string nums_str = nums.map!(n => n.to!string).join(" + ");
+//             writefln("HEADER:\t%8s", header);
+//             writeln(format("%8s: %d * (%s) = %d", tag, multi, nums_str, result));
+//         });
+
+//     Help help = new Help;
+// }

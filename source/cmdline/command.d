@@ -113,7 +113,7 @@ class Command : EventManager {
     }
 
     string description() const {
-        return this._description;
+        return "description: " ~ this._description;
     }
 
     Self description(string str, string[string] argsDesc = null) {
@@ -179,6 +179,23 @@ class Command : EventManager {
                 cmd._hidden = *is_hidden;
         }
         return this;
+    }
+
+    Self argumentDesc(string argName, string desc) {
+        auto arg = _findArgument(argName);
+        if (arg)
+            arg._description = desc;
+        return this;
+    }
+
+    void _registerArgument(Argument arg) {
+        auto other = _findArgument(arg._name);
+        if (other) {
+            throw new CMDLineError(
+                format!"cannot add argument `%s` as this name already used "(
+                    arg._name));
+        }
+        this._arguments ~= arg;
     }
 
     void _registerCommand(Command command) {
@@ -761,7 +778,7 @@ class Command : EventManager {
                     }
                 }
                 else if (this._addImplicitHelpOption) {
-                    if (arg == "-h" || arg == "help") {
+                    if (arg == "-h" || arg == "--help") {
                         auto hopt = this._getHelpOption();
                         this.emit("option:" ~ hopt.name);
                         continue;
@@ -783,8 +800,8 @@ class Command : EventManager {
 
             if (arg.length > 2 && arg[0] == '-' && arg[1] != '-') {
                 Option opt = _findOption("-" ~ arg[1]);
-                string name = opt.name;
                 if (opt) {
+                    string name = opt.name;
                     if (opt.isRequired || opt.isOptional) {
                         bool is_variadic = opt.variadic;
                         if (!is_variadic)
@@ -799,7 +816,7 @@ class Command : EventManager {
                     }
                     else if (_combineFlagAndOptionalValue) {
                         this.emit("option:" ~ name);
-                        _args.insertInPlace(0, arg[2 .. $]);
+                        _args.insertInPlace(0, "-" ~ arg[2 .. $]);
                     }
                     else {
                         this.error("invalid value: `" ~ arg[2 .. $] ~ "` for bool option " ~ opt
@@ -833,7 +850,6 @@ class Command : EventManager {
             }
 
             if (auto _cmd = find_cmd(arg)) {
-                writeln("CMD_NAME:\t", _cmd._name);
                 this.subCommand = _cmd;
                 unknowns ~= _args;
                 break;
@@ -865,12 +881,6 @@ class Command : EventManager {
         auto hlp = cmd._helpConfiguration;
         if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
             more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
-            candidate_flags ~= more_flags;
-        }
-        else if (flag[0] == '-' && this._showSuggestionAfterError) {
-            more_flags = hlp.visibleOptions(cmd).filter!(opt => !opt.shortFlag.empty)
-                .map!(opt => opt.shortFlag)
-                .array;
             candidate_flags ~= more_flags;
         }
         suggestion = suggestSimilar(flag, candidate_flags);
@@ -934,9 +944,19 @@ class Command : EventManager {
             if (arg.isRequired && !arg.isValid)
                 throw new CMDLineError;
         });
+        this._arguments.each!((Argument arg) {
+            if (arg.isValid || arg.settled)
+                arg.initialize;
+        });
+        Argument prev = null;
+        foreach (i, arg; this._arguments) {
+            if (prev && arg.settled && !prev.settled)
+                this.error("arg should be valid in row");
+            prev = arg;
+        }
         this.args = this._arguments
-            .filter!((Argument arg) { return !(arg.isOptional && !arg.isValid); })
-            .map!((Argument arg) { arg.initialize; return arg.get; })
+            .filter!(arg => arg.settled)
+            .map!(arg => arg.get)
             .array;
     }
 
@@ -1011,8 +1031,8 @@ class Command : EventManager {
         });
         Command cmd = createCommand(vname).description(
             "output the version number");
-        cmd.setHelpCommand(false);
-        cmd.setHelpCommand(false);
+        // cmd.setHelpCommand(false);
+        // cmd.setHelpOption(false);
         if (auto help_cmd = this._helpCommand) {
             auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
             auto none = help_cmd_name_arr.find!(
@@ -1075,6 +1095,10 @@ class Command : EventManager {
             if (args.length) {
                 auto sub_cmd_name = args[0].get!string;
                 auto sub_cmd = this._findCommand(sub_cmd_name);
+                auto vcmd = this._versionCommand;
+                sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
+                if (!sub_cmd || sub_cmd._hidden)
+                    this.error("can not find the sub command `" ~ sub_cmd_name ~ "`!");
                 sub_cmd.help();
             }
             this.help();
@@ -1157,6 +1181,12 @@ class Command : EventManager {
 
     Self addHelpOption(string flags = "", string desc = "") {
         return this.setHelpOption(flags, desc);
+    }
+
+    Self disableHelp() {
+        setHelpCommand(false);
+        setHelpOption(false);
+        return this;
     }
 
     Option _getHelpOption() {
@@ -1281,9 +1311,17 @@ class Command : EventManager {
         return this._aliasNames;
     }
 
+    inout(Argument) _findArgument(string name) inout {
+        auto validate = (inout Argument arg) { return name == arg._name; };
+        auto tmp = this._arguments.find!validate;
+        return tmp.empty ? null : tmp[0];
+    }
+
     inout(Command) _findCommand(string name) inout {
-        auto validate = (inout Command cmd) => cmd._name == name || cast(bool) cmd._aliasNames.count(
-            name);
+        auto validate = (inout Command cmd) {
+            auto result = cmd._name == name || cmd._aliasNames.any!(n => n == name);
+            return result;
+        };
         auto tmp = this._commands.find!validate;
         return tmp.empty ? null : tmp[0];
     }
@@ -1307,7 +1345,7 @@ class Command : EventManager {
         if (prev_arg && prev_arg.isOptional && argument.isRequired) {
             throw new CMDLineError;
         }
-        this._arguments ~= argument;
+        _registerArgument(argument);
         return this;
     }
 
@@ -1409,8 +1447,8 @@ class Command : EventManager {
         this._outputConfiguration.writeErr(msg ~ "\n");
         if (this._showHelpAfterError) {
             this._outputConfiguration.writeErr("\n");
-            this.outputHelp(true);
         }
+        this.outputHelp(true);
         this._exitErr(msg, code);
     }
 

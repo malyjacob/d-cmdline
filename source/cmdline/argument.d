@@ -21,7 +21,7 @@ alias isArgValueType(T) = isOptionValueType!T;
 alias ArgMemberFnCallError = cmdline.error.OptionMemberFnCallError;
 
 class Argument {
-    string description;
+    string _description;
     string defaultDescription;
     bool required;
     bool variadic;
@@ -32,7 +32,7 @@ class Argument {
     Source source;
 
     this(string flag, string description) {
-        this.description = description;
+        this._description = description;
         this.defaultDescription = "";
         switch (flag[0]) {
         case '<':
@@ -58,6 +58,15 @@ class Argument {
     }
 
     alias Self = typeof(this);
+
+    string description() const {
+        return "description: " ~ this._description;
+    }
+
+    Self description(string desc) {
+        this._description = desc;
+        return this;
+    }
 
     @property
     string name() const {
@@ -351,6 +360,8 @@ class ValueArgument(T) : Argument {
         }
 
         override string rangeOfStr() const {
+            if (_min == int.min && _max == int.max)
+                return "";
             return "range: " ~ _min.to!string ~ " ~ " ~ _max.to!string;
         }
     }

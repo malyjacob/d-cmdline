@@ -61,6 +61,10 @@ public:
     Self on(string eventName, EventCallback_1 callback) {
         auto ptr = eventName in eventMap;
         assert(!ptr || (*ptr)._fn1 is null);
+        if (ptr) {
+            eventMap[eventName] = callback;
+            return this;
+        }
         EventFn fn;
         eventMap[eventName] = fn = callback;
         return this;
@@ -69,6 +73,10 @@ public:
     Self on(string eventName, EventCallback_2 callback) {
         auto ptr = eventName in eventMap;
         assert(!ptr || (*ptr)._fn2 is null);
+        if (ptr) {
+            eventMap[eventName] = callback;
+            return this;
+        }
         EventFn fn;
         eventMap[eventName] = fn = callback;
         eventMap[eventName] = callback;
@@ -78,6 +86,10 @@ public:
     Self on(string eventName, EventCallback_3 callback) {
         auto ptr = eventName in eventMap;
         assert(!ptr || (*ptr)._fn3 is null);
+        if (ptr) {
+            eventMap[eventName] = callback;
+            return this;
+        }
         EventFn fn;
         eventMap[eventName] = fn = callback;
         eventMap[eventName] = callback;
@@ -87,6 +99,10 @@ public:
     Self on(string eventName, EventCallback_4 callback) {
         auto ptr = eventName in eventMap;
         assert(!ptr || (*ptr)._fn4 is null);
+        if (ptr) {
+            eventMap[eventName] = callback;
+            return this;
+        }
         EventFn fn;
         eventMap[eventName] = fn = callback;
         eventMap[eventName] = callback;

@@ -21,7 +21,7 @@ shared static this() {
     PTN_SP = regex(`[ |,]+`);
     PTN_CMDNAMEANDARGS = regex(`([^ ]+) *(.*)`, "g");
     PTN_IMPLYMAPKEY = regex(`([(?:\w\-)\w]+\w)\:((\w+)(\[\])?)`, "g");
-    PTN_MANUALINDENT = regex("[\\n][ \\f\\t\\v\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000\ufeff]+");
+    PTN_MANUALINDENT = regex(`[\n][ \f\t\v]+`);
     PTN_LONGASSIGN = regex(`^(--[(?:\w\-)\w]+\w)=([\S]+)`, "g");
 }
 

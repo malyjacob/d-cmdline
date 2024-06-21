@@ -8,7 +8,7 @@
     },
     "targetType": "executable",
     "targetName": "multi",
-    "targetPath": ".",
+    "targetPath": "../",
     "version": "0.0.1",
     "sourcePaths": ["."],
 	"dflags": ["-preview=in"]
