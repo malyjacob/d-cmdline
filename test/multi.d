@@ -21,13 +21,20 @@ void main(string[] argv) {
     });
     program.option("-f, --first <num>", "test", 13);
     program.option("-s, --second <num>", "test", 12);
-    program.argument("[multi]", "multtititi", 4);
+    program.option("-m, --multi <num>", "multi", 4);
+    program.option("-M, --no-multi", "disable the option multi and make the multi num as 1");
+    program.option("-N, --no-positive", "set the final result to the negate one");
     program.action((args, optMap) {
         auto fnum = optMap["first"].get!int;
         auto snum = optMap["second"].get!int;
         int multi = 1;
-        if (args.length)
-            multi = args[0].get!int;
+        bool pos;
+        if (auto ptr = "multi" in optMap)
+            multi = (*ptr).get!int;
+        if (auto ptr = "positvie" in optMap)
+            pos = (*ptr).get!bool;
+        if (!pos)
+            multi = -multi;
         writeln(format("%4d * (%4d + %4d) = %4d", multi, fnum, snum, (fnum + snum) * multi));
     });
 
@@ -96,9 +103,11 @@ void main(string[] argv) {
     method_opt.choices("email", "web");
     method_opt.preset("email");
     method_opt.defaultVal("web");
-    Option name_opt = createOption!string("-n, --name <name>", "specify the name that your message aiming for.");
+    Option name_opt = createOption!string("-n, --name [name]", "specify the name that your message aiming for.");
     name_opt.env("YOUR_FRIEND");
+    name_opt.preset("MY_FRIEND");
     name_opt.implies("suffix", "YOUR_FRIEND_IMPLY");
+    name_opt.implies(["paris", "london", "tokyo"]);
 
     Option suffix_opt = createOption!string("-x, --suffix <suffix>", "the suffix of the path");
 
@@ -113,6 +122,7 @@ void main(string[] argv) {
             string method;
             string name;
             string suffix;
+            bool paris, london, tokyo;
 
             if ("method" in opts)
                 method = opts["method"].get!string;
@@ -121,10 +131,37 @@ void main(string[] argv) {
             if ("suffix" in opts)
                 suffix = opts["suffix"].get!string;
 
+            if (auto ptr = "paris" in opts)
+                paris = ptr.get!bool;
+            if (auto ptr = "london" in opts)
+                london = ptr.get!bool;
+            if (auto ptr = "tokyo" in opts)
+                tokyo = ptr.get!bool;
             writefln("send msg: %16s to %8s, using mwthod: %8s and the suffix is: %8s", msg, name, method, suffix);
+            assert(paris && london && tokyo);
         });
 
-
+    Command palu = program.command("palu").description("test the member fn `.arguments!Arg`");
+    palu.setVersion("0.0.1");
+    palu.arguments!(bool, int, double, string)("<required-1> required-2 [optional] [variadic...]");
+    palu.action((args, opts) {
+        bool req_1 = args[0].get!bool;
+        int req_2 = args[1].get!int;
+        double op_1 = 0.0;
+        string[] var;
+        if (args.length > 2)
+            op_1 = args[2].get!double;
+        if (args.length > 3)
+            var = args[3].get!(string[]);
+        
+        writefln("%6s, %6d, %6f, %s", req_1, req_2, op_1, var);
+    });
+    palu.argumentDesc([
+        "required-1": "required_1",
+        "required-2": "required_2",
+        "optional": "optional",
+        "variadic": "variadic"
+    ]);
     writeln(program._outputConfiguration.getOutHelpWidth());
     program.parse(argv);
 }

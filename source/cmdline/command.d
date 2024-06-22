@@ -63,6 +63,8 @@ class Command : EventManager {
 
     Command subCommand = null;
 
+    bool immediately = false;
+
     ArgVariant[] args = [];
     OptionVariant[string] opts = null;
 
@@ -185,6 +187,13 @@ class Command : EventManager {
         auto arg = _findArgument(argName);
         if (arg)
             arg._description = desc;
+        return this;
+    }
+
+    Self argumentDesc(string[string] descMap) {
+        foreach (argName, desc; descMap) {
+            argumentDesc(argName, desc);
+        }
         return this;
     }
 
@@ -409,17 +418,23 @@ class Command : EventManager {
         return this;
     }
 
-    Self addActionOption(Option option, void delegate(string[] vals...) call_back) {
+    Self addActionOption(Option option, void delegate(string[] vals...) call_back, bool endMode = true) {
         this._registerOption(option);
         string name = option.name;
-        this.on("option:" ~ name, () { call_back(); this._exitSuccessfully(); });
+        this.on("option:" ~ name, () {
+            call_back();
+            if (endMode)
+                this._exitSuccessfully();
+        });
         this.on("option:" ~ name, (string str) {
             call_back(str);
-            this._exitSuccessfully();
+            if (endMode)
+                this._exitSuccessfully();
         });
         this.on("option:" ~ name, (string[] strs) {
             call_back(strs);
-            this._exitSuccessfully();
+            if (endMode)
+                this._exitSuccessfully();
         });
         return this;
     }
@@ -427,7 +442,7 @@ class Command : EventManager {
     Self _optionImpl(T, bool isMandatory = false)(string flags, string desc)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
-        option.makeOptionMandatory(isMandatory);
+        option.makeMandatory(isMandatory);
         return this.addOption(option);
     }
 
@@ -463,7 +478,7 @@ class Command : EventManager {
     Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
-        option.makeOptionMandatory(isMandatory);
+        option.makeMandatory(isMandatory);
         option.defaultVal(defaultValue);
         return this.addOption(option);
     }
@@ -659,8 +674,9 @@ class Command : EventManager {
             .filter!(opt => opt.settled)
             .map!(opt => tuple(opt.name, opt.get))
             .assocArray;
-        if (this.subCommand)
+        if (this.subCommand) {
             this.subCommand._parseCommand(parsed[1]);
+        }
         else
             this.emit("action:" ~ this._name);
     }
@@ -703,6 +719,8 @@ class Command : EventManager {
                 if (cmd) {
                     this.subCommand = cmd;
                     popFront(_args);
+                    if (subCommand.immediately)
+                        subCommand._parseCommand(_args);
                     unknowns ~= _args;
                 }
                 break;
@@ -851,6 +869,8 @@ class Command : EventManager {
 
             if (auto _cmd = find_cmd(arg)) {
                 this.subCommand = _cmd;
+                if (subCommand.immediately)
+                    subCommand._parseCommand(_args);
                 unknowns ~= _args;
                 break;
             }
@@ -970,12 +990,47 @@ class Command : EventManager {
             foreach (string key, OptionVariant value; imply_map) {
                 auto tmp = split(key, ':');
                 string name = tmp[0];
+                string type = tmp[1];
                 Option opt = _findOption(name);
                 if (opt && !opt.isValid)
                     opt.implyVal(value);
                 if (opt && (opt.source == Source.Default)) {
                     opt.settled = false;
                     opt.implyVal(value);
+                }
+                if (!opt) {
+                    string flag = format("--%s <%s-value>", name, name);
+                    string flag2 = format("--%s", name);
+                    string flag3 = format("--%s <%s-value...>", name, name);
+                    switch (type) {
+                    case int.stringof:
+                        opt = createOption!int(flag);
+                        break;
+                    case double.stringof:
+                        opt = createOption!double(flag);
+                        break;
+                    case string.stringof:
+                        opt = createOption!string(flag);
+                        break;
+                    case bool.stringof:
+                        opt = createOption!bool(flag2);
+                        break;
+                    case (int[]).stringof:
+                        opt = createOption!int(flag3);
+                        break;
+                    case (double[]).stringof:
+                        opt = createOption!double(flag3);
+                        break;
+                    case (string[]).stringof:
+                        opt = createOption!string(flag3);
+                        break;
+                    default:
+                        break;
+                    }
+                    if (opt) {
+                        opt.implyVal(value);
+                        this.addOption(opt);
+                    }
                 }
             }
         };
@@ -1003,9 +1058,19 @@ class Command : EventManager {
     }
 
     Self setVersion(string str, string flags = "", string desc = "") {
-        assert(!this._versionOption);
-        assert(!this._versionCommand);
         this._version = str;
+        setVersionOption(flags, desc);
+        string vname = this._versionOption.name;
+        setVersionCommand(vname, desc);
+        return this;
+    }
+
+    string getVersion() const {
+        return this._version.idup;
+    }
+
+    Self setVersionOption(string flags = "", string desc = "") {
+        assert(!this._versionOption);
         flags = flags == "" ? "-V, --version" : flags;
         desc = desc == "" ? "output the version number" : desc;
         auto vopt = createOption(flags, desc);
@@ -1024,15 +1089,43 @@ class Command : EventManager {
                     due to confliction config option `%s`"(vopt.flags, config_opt.flags));
         }
         this._versionOption = vopt;
-        string vname = this._versionOption.name;
+        string vname = vopt.name;
         this.on("option:" ~ vname, () {
             this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
-        Command cmd = createCommand(vname).description(
-            "output the version number");
-        // cmd.setHelpCommand(false);
-        // cmd.setHelpOption(false);
+        return this;
+    }
+
+    Self addVersionOption(string flags = "", string desc = "") {
+        return setVersionOption(flags, desc);
+    }
+
+    Self addVersionOption(Option opt, void delegate() action = null) {
+        assert(!this._versionOption);
+        this._versionOption = opt;
+        if (!action) {
+            this.on("option:" ~ opt.name, () {
+                this._outputConfiguration.writeOut(this._version ~ "\n");
+                this._exitSuccessfully();
+            });
+        }
+        else
+            this.on("option:" ~ opt.name, () {
+                action();
+                this._exitSuccessfully();
+            });
+        return this;
+    }
+
+    Self setVersionCommand(string flags = "", string desc = "") {
+        assert(!this._versionCommand);
+        flags = flags == "" ? "version" : flags;
+        desc = desc == "" ? "output the version number" : desc;
+        Command cmd = createCommand(flags).description(desc);
+        cmd.setHelpOption(false);
+        cmd.setHelpCommand(false);
+        string vname = cmd._name;
         if (auto help_cmd = this._helpCommand) {
             auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
             auto none = help_cmd_name_arr.find!(
@@ -1063,20 +1156,50 @@ class Command : EventManager {
             this._exitSuccessfully();
         };
         cmd.parent = this;
-        cmd.action(fn);
+        cmd.action(fn, true);
         this._versionCommand = cmd;
         return this;
     }
 
-    string getVersion() const {
-        return this._version.idup;
+    Self addVersionCommand(string flags = "", string desc = "") {
+        return setVersionCommand(flags, desc);
+    }
+
+    Self addVersionCommand(Command cmd) {
+        assert(!this._versionCommand);
+        string vname = cmd._name;
+        if (auto help_cmd = this._helpCommand) {
+            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
+            auto none = help_cmd_name_arr.find!(
+                name => vname == name).empty;
+            if (!none) {
+                string help_cmd_names = help_cmd_name_arr.join("|");
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        else if (this._addImplicitHelpCommand) {
+            string help_cmd_names = "help";
+            if (vname == help_cmd_names) {
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        cmd.parent = this;
+        this._versionCommand = cmd;
+        return this;
     }
 
     Self setHelpCommand(string flags = "", string desc = "") {
         assert(!this._helpCommand);
-        flags = flags == "" ? "help [command]" : flags;
+        bool has_sub_cmd =  this._versionCommand !is null || !this._commands.find!(cmd => !cmd._hidden).empty;
+        flags = flags == "" ? has_sub_cmd ? "help [command]" : "help" : flags;
         desc = desc == "" ? "display help for command" : desc;
-        Command help_cmd = createCommand!(string)(flags, desc);
+        Command help_cmd = has_sub_cmd ? createCommand!(string)(flags, desc) : createCommand(flags, desc);
         help_cmd.setHelpOption(false);
         help_cmd.setHelpCommand(false);
         string hname = help_cmd._name;
@@ -1104,7 +1227,7 @@ class Command : EventManager {
             this.help();
         };
         help_cmd.parent = this;
-        help_cmd.action(fn);
+        help_cmd.action(fn, true);
         this._helpCommand = help_cmd;
         return setHelpCommand(true);
     }
@@ -1172,10 +1295,16 @@ class Command : EventManager {
         return this;
     }
 
-    Self addHelpOption(Option option) {
+    Self addHelpOption(Option option, void delegate() action = null) {
         assert(!this._helpOption);
         this._helpOption = option;
-        this.on("option:" ~ option.name, () { this.help(); });
+        if (!action)
+            this.on("option:" ~ option.name, () { this.help(); });
+        else
+            this.on("option:" ~ option.name, () {
+                action();
+                this._exitSuccessfully();
+            });
         return setHelpOption(true);
     }
 
@@ -1249,7 +1378,8 @@ class Command : EventManager {
         }
     }
 
-    Self action(ActionCallback fn) {
+    Self action(ActionCallback fn, bool immediately = false) {
+        this.immediately = immediately;
         auto listener = () {
             ArgVariant[] args;
             OptionVariant[string] opts;
@@ -1487,7 +1617,7 @@ unittest {
     auto cmd = new Command("cmdline");
     assert(cmd._allowExcessArguments);
     cmd.description("this is test");
-    assert("this is test" == cmd.description);
+    assert("description: this is test" == cmd.description);
     cmd.description("this is test", ["first": "1st", "second": "2nd"]);
     assert(cmd._argsDescription == ["first": "1st", "second": "2nd"]);
     cmd.setVersion("0.0.1");
