@@ -11,9 +11,10 @@ import std.process;
 import std.range;
 
 void main(string[] argv) {
-    Command program = createCommand("program");
+    Command program = createCommand("multi");
     program.allowExcessArguments(false);
     program.setVersion("0.0.1");
+    program.setConfigOption();
 
     Option opt = createOption!string("-g, --greeting <str>");
     program.addActionOption(opt, (string[] vals...) {
@@ -163,5 +164,7 @@ void main(string[] argv) {
         "variadic": "variadic"
     ]);
     writeln(program._outputConfiguration.getOutHelpWidth());
+    writeln(argv[0]);
     program.parse(argv);
+    writeln(program._selfPath);
 }

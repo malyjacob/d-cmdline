@@ -399,7 +399,8 @@ class ValueArgument(T) : Argument {
             if (is(U == ElementType!T) && !is(T == string)) {
         auto tmp = rest ~ [value];
         _checkValSeq(tmp);
-        this.defaultArg = tmp;
+        this.configArg = tmp;
+        return this;
     }
 
     static if (is(T == bool)) {
@@ -421,12 +422,12 @@ class ValueArgument(T) : Argument {
             assert(rest.empty);
             auto tmp = value.to!T;
             _checkVal(tmp);
-            this.defaultArg = tmp;
+            this.cliArg = tmp;
         }
         else {
             auto tmp = (rest ~ [value]).map!(to!(ElementType!T)).array;
             _checkValSeq(tmp);
-            this.defaultArg = tmp;
+            this.cliArg = tmp;
         }
         return this;
     }

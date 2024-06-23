@@ -1,0 +1,17 @@
+{
+    "options": {
+        "first": 23,
+        "second": 22,
+        "multi": 5
+    },
+    "palu": {
+        "arguments": [
+            false,
+            13,
+            24.6,
+            "stars",
+            "we",
+            "chase"
+        ]
+    }
+}
