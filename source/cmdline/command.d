@@ -12,6 +12,9 @@ import std.string;
 import std.typecons;
 import std.algorithm;
 import std.format;
+import std.file;
+import std.path;
+import std.json;
 
 import cmdline.error;
 import cmdline.argument;
@@ -21,6 +24,7 @@ import cmdline.pattern;
 import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
+import core.sys.posix.libgen;
 
 enum AddHelpPos : string {
     BeforeAll = "beforeAll",
@@ -63,6 +67,8 @@ class Command : EventManager {
 
     Command subCommand = null;
 
+    bool immediately = false;
+
     ArgVariant[] args = [];
     OptionVariant[string] opts = null;
 
@@ -86,6 +92,8 @@ class Command : EventManager {
     Command _versionCommand = null;
 
     Option _configOption = null;
+    string configEnvKey = "";
+    const(JSONValue)* jconfig = null;
 
     this(string name) {
         this._name = name;
@@ -185,6 +193,13 @@ class Command : EventManager {
         auto arg = _findArgument(argName);
         if (arg)
             arg._description = desc;
+        return this;
+    }
+
+    Self argumentDesc(string[string] descMap) {
+        foreach (argName, desc; descMap) {
+            argumentDesc(argName, desc);
+        }
         return this;
     }
 
@@ -409,17 +424,23 @@ class Command : EventManager {
         return this;
     }
 
-    Self addActionOption(Option option, void delegate(string[] vals...) call_back) {
+    Self addActionOption(Option option, void delegate(string[] vals...) call_back, bool endMode = true) {
         this._registerOption(option);
         string name = option.name;
-        this.on("option:" ~ name, () { call_back(); this._exitSuccessfully(); });
+        this.on("option:" ~ name, () {
+            call_back();
+            if (endMode)
+                this._exitSuccessfully();
+        });
         this.on("option:" ~ name, (string str) {
             call_back(str);
-            this._exitSuccessfully();
+            if (endMode)
+                this._exitSuccessfully();
         });
         this.on("option:" ~ name, (string[] strs) {
             call_back(strs);
-            this._exitSuccessfully();
+            if (endMode)
+                this._exitSuccessfully();
         });
         return this;
     }
@@ -427,7 +448,7 @@ class Command : EventManager {
     Self _optionImpl(T, bool isMandatory = false)(string flags, string desc)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
-        option.makeOptionMandatory(isMandatory);
+        option.makeMandatory(isMandatory);
         return this.addOption(option);
     }
 
@@ -463,7 +484,7 @@ class Command : EventManager {
     Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
-        option.makeOptionMandatory(isMandatory);
+        option.makeMandatory(isMandatory);
         option.defaultVal(defaultValue);
         return this.addOption(option);
     }
@@ -643,11 +664,10 @@ class Command : EventManager {
     }
 
     void _parseCommand(in string[] unknowns) {
+        this.parseOptionsEnv();
         auto parsed = this.parseOptions(unknowns);
         this.argFlags = parsed[0];
         this.unknownFlags = parsed[1];
-        this.parseArguments(parsed[0]);
-        this.parseOptionsEnv();
         this.parseOptionsConfig();
         this.parseOptionsImply();
         this._options
@@ -659,8 +679,10 @@ class Command : EventManager {
             .filter!(opt => opt.settled)
             .map!(opt => tuple(opt.name, opt.get))
             .assocArray;
-        if (this.subCommand)
+        this.parseArguments(parsed[0]);
+        if (this.subCommand) {
             this.subCommand._parseCommand(parsed[1]);
+        }
         else
             this.emit("action:" ~ this._name);
     }
@@ -703,6 +725,8 @@ class Command : EventManager {
                 if (cmd) {
                     this.subCommand = cmd;
                     popFront(_args);
+                    if (subCommand.immediately)
+                        subCommand._parseCommand(_args);
                     unknowns ~= _args;
                 }
                 break;
@@ -792,7 +816,11 @@ class Command : EventManager {
                 }
                 if (Option copt = this._configOption) {
                     if (copt.isFlag(arg)) {
-                        this.emit("option:" ~ copt.name);
+                        string value = get_front(_args);
+                        if (value.empty || maybe_opt(value))
+                            this.optionMissingArgument(opt);
+                        this.emit("option:" ~ copt.name, value);
+                        _args.popFront;
                         continue;
                     }
                 }
@@ -851,6 +879,10 @@ class Command : EventManager {
 
             if (auto _cmd = find_cmd(arg)) {
                 this.subCommand = _cmd;
+                if (subCommand.immediately && subCommand._actionHandler !is null) {
+                    this.parseOptionsConfig();
+                    subCommand._parseCommand(_args);
+                }
                 unknowns ~= _args;
                 break;
             }
@@ -970,12 +1002,47 @@ class Command : EventManager {
             foreach (string key, OptionVariant value; imply_map) {
                 auto tmp = split(key, ':');
                 string name = tmp[0];
+                string type = tmp[1];
                 Option opt = _findOption(name);
                 if (opt && !opt.isValid)
                     opt.implyVal(value);
                 if (opt && (opt.source == Source.Default)) {
                     opt.settled = false;
                     opt.implyVal(value);
+                }
+                if (!opt) {
+                    string flag = format("--%s <%s-value>", name, name);
+                    string flag2 = format("--%s", name);
+                    string flag3 = format("--%s <%s-value...>", name, name);
+                    switch (type) {
+                    case int.stringof:
+                        opt = createOption!int(flag);
+                        break;
+                    case double.stringof:
+                        opt = createOption!double(flag);
+                        break;
+                    case string.stringof:
+                        opt = createOption!string(flag);
+                        break;
+                    case bool.stringof:
+                        opt = createOption!bool(flag2);
+                        break;
+                    case (int[]).stringof:
+                        opt = createOption!int(flag3);
+                        break;
+                    case (double[]).stringof:
+                        opt = createOption!double(flag3);
+                        break;
+                    case (string[]).stringof:
+                        opt = createOption!string(flag3);
+                        break;
+                    default:
+                        break;
+                    }
+                    if (opt) {
+                        opt.implyVal(value);
+                        this.addOption(opt);
+                    }
                 }
             }
         };
@@ -990,7 +1057,14 @@ class Command : EventManager {
     }
 
     void parseOptionsConfig() {
-        // next time to finish  it;
+        alias Value = const(JSONValue)*;
+        if (this._configOption) {
+            Value j_config = _processConfigFile(this.configEnvKey);
+            this.jconfig = j_config ? j_config : this.jconfig;
+        }
+        if (this.jconfig) {
+            parseConfigOptionsImpl(this.jconfig);
+        }
     }
 
     Self name(string str) {
@@ -1003,9 +1077,19 @@ class Command : EventManager {
     }
 
     Self setVersion(string str, string flags = "", string desc = "") {
-        assert(!this._versionOption);
-        assert(!this._versionCommand);
         this._version = str;
+        setVersionOption(flags, desc);
+        string vname = this._versionOption.name;
+        setVersionCommand(vname, desc);
+        return this;
+    }
+
+    string getVersion() const {
+        return this._version.idup;
+    }
+
+    Self setVersionOption(string flags = "", string desc = "") {
+        assert(!this._versionOption);
         flags = flags == "" ? "-V, --version" : flags;
         desc = desc == "" ? "output the version number" : desc;
         auto vopt = createOption(flags, desc);
@@ -1024,15 +1108,43 @@ class Command : EventManager {
                     due to confliction config option `%s`"(vopt.flags, config_opt.flags));
         }
         this._versionOption = vopt;
-        string vname = this._versionOption.name;
+        string vname = vopt.name;
         this.on("option:" ~ vname, () {
             this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
-        Command cmd = createCommand(vname).description(
-            "output the version number");
-        // cmd.setHelpCommand(false);
-        // cmd.setHelpOption(false);
+        return this;
+    }
+
+    Self addVersionOption(string flags = "", string desc = "") {
+        return setVersionOption(flags, desc);
+    }
+
+    Self addVersionOption(Option opt, void delegate() action = null) {
+        assert(!this._versionOption);
+        this._versionOption = opt;
+        if (!action) {
+            this.on("option:" ~ opt.name, () {
+                this._outputConfiguration.writeOut(this._version ~ "\n");
+                this._exitSuccessfully();
+            });
+        }
+        else
+            this.on("option:" ~ opt.name, () {
+                action();
+                this._exitSuccessfully();
+            });
+        return this;
+    }
+
+    Self setVersionCommand(string flags = "", string desc = "") {
+        assert(!this._versionCommand);
+        flags = flags == "" ? "version" : flags;
+        desc = desc == "" ? "output the version number" : desc;
+        Command cmd = createCommand(flags).description(desc);
+        cmd.setHelpOption(false);
+        cmd.setHelpCommand(false);
+        string vname = cmd._name;
         if (auto help_cmd = this._helpCommand) {
             auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
             auto none = help_cmd_name_arr.find!(
@@ -1063,20 +1175,280 @@ class Command : EventManager {
             this._exitSuccessfully();
         };
         cmd.parent = this;
-        cmd.action(fn);
+        cmd.action(fn, true);
         this._versionCommand = cmd;
         return this;
     }
 
-    string getVersion() const {
-        return this._version.idup;
+    Self addVersionCommand(string flags = "", string desc = "") {
+        return setVersionCommand(flags, desc);
+    }
+
+    Self addVersionCommand(Command cmd) {
+        assert(!this._versionCommand);
+        string vname = cmd._name;
+        if (auto help_cmd = this._helpCommand) {
+            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
+            auto none = help_cmd_name_arr.find!(
+                name => vname == name).empty;
+            if (!none) {
+                string help_cmd_names = help_cmd_name_arr.join("|");
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        else if (this._addImplicitHelpCommand) {
+            string help_cmd_names = "help";
+            if (vname == help_cmd_names) {
+                throw new CMDLineError(
+                    format!"cannot add command `%s` as this command name cannot be same as
+                        the name of help command `%s`"(
+                        vname, help_cmd_names));
+            }
+        }
+        cmd.parent = this;
+        this._versionCommand = cmd;
+        return this;
+    }
+
+    Self setConfigOption(string flags = "", string desc = "", string envKey = "") {
+        assert(!this._configOption);
+        flags = flags == "" ? "-C, --config <config-path>" : flags;
+        string exePath = thisExePath();
+        string exeDir = dirName(exePath);
+        version (Posix) {
+            string base_name = baseName(exePath);
+        }
+        else version (Windows)
+            string base_name = baseName(exePath)[0 .. $ - 3];
+        desc = desc == "" ?
+            format("define the path to the config file," ~
+                    "if not specified, the config file name would be" ~
+                    " `%s.config.json` and it is on the dir where `%s`situates on",
+                this._name, base_name) : desc;
+        string tmp = (this.name ~ "-config-path").replaceAll(regex(`-`), "_").toUpper;
+        envKey = envKey.empty ? tmp : envKey;
+        environment[envKey] = buildPath(exeDir, format("%s.config.json", this._name));
+        this.configEnvKey = envKey;
+        auto copt = createOption!string(flags, desc);
+        if (auto help_opt = this._helpOption) {
+            if (copt.matchFlag(help_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction help option `%s`"(copt.flags, help_opt.flags));
+        }
+        else if (this._addImplicitHelpOption && (copt.shortFlag == "-h" || copt.longFlag == "--help")) {
+            throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction help option `%s`"(copt.flags, "-h, --help"));
+        }
+        if (auto version_opt = this._versionOption) {
+            if (copt.matchFlag(version_opt))
+                throw new CMDLineError(format!"Cannot add option '%s'
+                    due to confliction version option `%s`"(copt.flags, version_opt.flags));
+        }
+        this._configOption = copt;
+        string cname = copt.name;
+        this.on("option:" ~ cname, (string configPath) {
+            string path = environment[this.configEnvKey];
+            string origin_path = dirName(path);
+            string base = baseName(path);
+            string p1 = buildPath(origin_path, configPath);
+            string p2 = buildPath(configPath);
+            if (exists(p1)) {
+                environment[this.configEnvKey] = buildPath(p1, base);
+            }
+            else if (exists(p2)) {
+                environment[this.configEnvKey] = buildPath(p2, base);
+            }
+            else
+                this.error(format("invalid path: %s\n\v%s", p1, p2));
+        });
+        return this;
+    }
+
+    void parseConfigOptionsImpl(const(JSONValue)* config) {
+        alias Value = const(JSONValue)*;
+        if (this.subCommand) {
+            string sub_name = this.subCommand._name;
+            Value sub_config = sub_name in *config;
+            this.subCommand.jconfig = sub_config;
+        }
+        else {
+            Value[string] copts;
+            Value[] cargs;
+            if (Value ptr = "arguments" in *config) {
+                if (ptr.type != JSONType.ARRAY) {
+                    this.error("the `arguments`'s value must be array!");
+                }
+                ptr.array.each!((const ref JSONValue ele) {
+                    if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
+                        this.error("the `argument`'s element value cannot be object or null!");
+                    }
+                    cargs ~= &ele;
+                });
+            }
+            if (Value ptr = "options" in *config) {
+                if (ptr.type != JSONType.OBJECT) {
+                    this.error("the `options`'s value must be object!");
+                }
+                foreach (string key, const ref JSONValue ele; ptr.object) {
+                    if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
+                        this.error("the `option`'s value cannot be object or null!");
+                    }
+                    if (ele.type == JSONType.ARRAY) {
+                        if (ele.array.length < 1)
+                            this.error("if the `option`'s value is array,
+                                then its length cannot be 0");
+                        bool all_int = ele.array.all!((ref e) => e.type == JSONType.INTEGER);
+                        bool all_double = ele.array.all!((ref e) => e.type == JSONType.FLOAT);
+                        bool all_string = ele.array.all!((ref e) => e.type == JSONType.STRING);
+                        if (!(all_int || all_double || all_string)) {
+                            this.error("if the `option`'s value is array,
+                                then its element type must all be int or double or string the same");
+                        }
+                    }
+                    copts[key] = &ele;
+                }
+            }
+            auto get_front = () => cargs.empty ? null : cargs.front;
+            auto test_regulra = () {
+                bool all_int = cargs.all!((ref e) => e.type == JSONType.INTEGER);
+                bool all_double = cargs.all!((ref e) => e.type == JSONType.FLOAT);
+                bool all_string = cargs.all!((ref e) => e.type == JSONType.STRING);
+                if (!(all_int || all_double || all_string)) {
+                    this.error(
+                        "the variadic `arguments`'s element type must all be int or double or string the same");
+                }
+            };
+            auto assign_arg_arr = (Argument arg) {
+                test_regulra();
+                auto tmp = cargs[0];
+                switch (tmp.type) {
+                case JSONType.INTEGER:
+                    arg.configVal(cargs.map!((ref ele) => cast(int) ele.get!int).array);
+                    break;
+                case JSONType.FLOAT:
+                    arg.configVal(cargs.map!((ref ele) => cast(double) ele.get!double).array);
+                    break;
+                case JSONType.STRING:
+                    arg.configVal(cargs.map!((ref ele) => cast(string) ele.get!string).array);
+                    break;
+                default:
+                    break;
+                }
+            };
+            foreach (Argument argument; this._arguments) {
+                auto is_v = argument.variadic;
+                if (!is_v) {
+                    if (Value value = get_front()) {
+                        mixin AssignOptOrArg!(argument, value);
+                        cargs.popFront();
+                    }
+                    else
+                        break;
+                }
+                else {
+                    if (cargs.length) {
+                        assign_arg_arr(argument);
+                        break;
+                    }
+                }
+            }
+            foreach (string key, Value value; copts) {
+                Option opt = _findOption(key);
+                if (opt) {
+                    mixin AssignOptOrArg!(opt, value);
+                }
+            }
+        }
+    }
+
+    mixin template AssignOptOrArg(alias target, alias src)
+            if (is(typeof(src) == const(JSONValue)*)) {
+        static if (is(typeof(target) == Argument)) {
+            Argument arg = target;
+        }
+        else static if (is(typeof(target) == Option)) {
+            Option arg = target;
+        }
+        else {
+            static assert(false);
+        }
+        const(JSONValue)* val = src;
+
+        static if (is(typeof(target) == Option)) {
+            auto assign_arr = () {
+                auto tmp = (val.array)[0];
+                switch (tmp.type) {
+                case JSONType.INTEGER:
+                    arg.configVal(val.array.map!((ref ele) => cast(int) ele.get!int).array);
+                    break;
+                case JSONType.FLOAT:
+                    arg.configVal(val.array.map!((ref ele) => cast(double) ele.get!double).array);
+                    break;
+                case JSONType.STRING:
+                    arg.configVal(val.array.map!((ref ele) => cast(string) ele.get!string).array);
+                    break;
+                default:
+                    break;
+                }
+            };
+        }
+
+        auto assign = () {
+            switch (val.type) {
+            case JSONType.INTEGER:
+                arg.configVal(cast(int) val.get!int);
+                break;
+            case JSONType.FLOAT:
+                arg.configVal(cast(double) val.get!double);
+                break;
+            case JSONType.STRING:
+                arg.configVal(cast(string) val.get!string);
+                break;
+            case JSONType.FALSE, JSONType.TRUE:
+                arg.configVal(cast(bool) val.get!bool);
+                break;
+                static if (is(typeof(target) == Option)) {
+            case JSONType.ARRAY:
+                    assign_arr();
+                    break;
+                }
+            default:
+                break;
+            }
+            return 0;
+        };
+
+        auto _x_Inner_ff = assign();
+    }
+
+    JSONValue* _processConfigFile(string envKey) const {
+        string path_to_config = environment[envKey];
+        if (path_to_config.length > 12 && path_to_config[$ - 12 .. $] == ".config.json"
+            && exists(path_to_config)) {
+            try {
+                string raw = readText(path_to_config);
+                return new JSONValue(parseJSON(raw));
+            }
+            catch (Exception e) {
+                this.error(e.msg);
+            }
+        }
+        else
+            this.error(
+                "the path must be valid and the config file must be the type of xxxx.config.json");
+        return null;
     }
 
     Self setHelpCommand(string flags = "", string desc = "") {
         assert(!this._helpCommand);
-        flags = flags == "" ? "help [command]" : flags;
+        bool has_sub_cmd = this._versionCommand !is null || !this._commands.find!(
+            cmd => !cmd._hidden).empty;
+        flags = flags == "" ? has_sub_cmd ? "help [command]" : "help" : flags;
         desc = desc == "" ? "display help for command" : desc;
-        Command help_cmd = createCommand!(string)(flags, desc);
+        Command help_cmd = has_sub_cmd ? createCommand!(string)(flags, desc) : createCommand(flags, desc);
         help_cmd.setHelpOption(false);
         help_cmd.setHelpCommand(false);
         string hname = help_cmd._name;
@@ -1104,7 +1476,7 @@ class Command : EventManager {
             this.help();
         };
         help_cmd.parent = this;
-        help_cmd.action(fn);
+        help_cmd.action(fn, true);
         this._helpCommand = help_cmd;
         return setHelpCommand(true);
     }
@@ -1172,10 +1544,16 @@ class Command : EventManager {
         return this;
     }
 
-    Self addHelpOption(Option option) {
+    Self addHelpOption(Option option, void delegate() action = null) {
         assert(!this._helpOption);
         this._helpOption = option;
-        this.on("option:" ~ option.name, () { this.help(); });
+        if (!action)
+            this.on("option:" ~ option.name, () { this.help(); });
+        else
+            this.on("option:" ~ option.name, () {
+                action();
+                this._exitSuccessfully();
+            });
         return setHelpOption(true);
     }
 
@@ -1249,7 +1627,8 @@ class Command : EventManager {
         }
     }
 
-    Self action(ActionCallback fn) {
+    Self action(ActionCallback fn, bool immediately = false) {
+        this.immediately = immediately;
         auto listener = () {
             ArgVariant[] args;
             OptionVariant[string] opts;
@@ -1487,7 +1866,7 @@ unittest {
     auto cmd = new Command("cmdline");
     assert(cmd._allowExcessArguments);
     cmd.description("this is test");
-    assert("this is test" == cmd.description);
+    assert("description: this is test" == cmd.description);
     cmd.description("this is test", ["first": "1st", "second": "2nd"]);
     assert(cmd._argsDescription == ["first": "1st", "second": "2nd"]);
     cmd.setVersion("0.0.1");

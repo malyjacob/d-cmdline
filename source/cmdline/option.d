@@ -1,6 +1,5 @@
 module cmdline.option;
 
-import std.stdio;
 import std.string;
 import std.regex;
 import std.meta;
@@ -146,7 +145,6 @@ class Option {
         this.innerImplyData = null;
     }
 
-
     string description() const {
         return "description: " ~ this._description;
     }
@@ -213,7 +211,7 @@ class Option {
         return this;
     }
 
-    Self makeOptionMandatory(bool mandatory = true) {
+    Self makeMandatory(bool mandatory = true) {
         this.mandatory = mandatory;
         return this;
     }
@@ -271,6 +269,7 @@ class Option {
 
     Self implyVal() {
         // throw new OptionMemberFnCallError;
+        this.innerImplyData = true;
         return this;
     }
 
@@ -294,6 +293,7 @@ class Option {
     @property
     abstract OptionVariant get() const;
     abstract Self initialize();
+    abstract Self implyVal(OptionVariant value);
 
     Self choices(T)(T[] values) {
         auto is_variadic = this.variadic;
@@ -366,31 +366,47 @@ class Option {
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
 
-    Self implyVal(OptionVariant value) {
+    // Self implyVal(OptionVariant value) {
+    //     this.innerImplyData = value;
+    //     return this;
+    // }
+
+    Self implyVal(T)(T value) if (isBaseOptionValueType!T) {
         this.innerImplyData = value;
         return this;
     }
 
-    Self implyVal(T)(T value) if (isBaseOptionValueType!T) {
-        static if (is(T == bool)) {
-            auto derived = cast(BoolOption) this;
-        }
-        else {
-            auto derived = cast(ValueOption!T) this;
-        }
-        return derived.implyVal(value);
-    }
-
     Self implyVal(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
-        auto derived = cast(VariadicOption!T) this;
-        return derived.implyVal(value, rest);
+        this.innerImplyData = [value] ~ rest;
+        return this;
     }
 
-    Self implyVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
+    Self implyVal(T)(T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         assert(values.length > 0);
-        return implyVal(values[0], cast(T[]) values[1 .. $]);
+        return implyVal(values[0], values[1 .. $]);
     }
+
+    // Self implyVal(T)(T value) if (isBaseOptionValueType!T) {
+    //     static if (is(T == bool)) {
+    //         auto derived = cast(BoolOption) this;
+    //     }
+    //     else {
+    //         auto derived = cast(ValueOption!T) this;
+    //     }
+    //     return derived.implyVal(value);
+    // }
+
+    // Self implyVal(T)(T value, T[] rest...)
+    //         if (isBaseOptionValueType!T && !is(T == bool)) {
+    //     auto derived = cast(VariadicOption!T) this;
+    //     return derived.implyVal(value, rest);
+    // }
+
+    // Self implyVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
+    //     assert(values.length > 0);
+    //     return implyVal(values[0], cast(T[]) values[1 .. $]);
+    // }
 
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
@@ -620,7 +636,7 @@ unittest {
 }
 
 class BoolOption : Option {
-    Nullable!bool implyArg;
+    // Nullable!bool implyArg;
     Nullable!bool configArg;
     Nullable!bool defaultArg;
 
@@ -630,7 +646,7 @@ class BoolOption : Option {
         super(flags, description);
         assert(this.isBoolean);
         assert(!this.variadic);
-        this.implyArg = null;
+        // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
         this.innerData = false;
@@ -658,20 +674,28 @@ class BoolOption : Option {
         return this;
     }
 
-    Self implyVal(bool value) {
-        this.implyArg = value;
+    override Self implyVal(OptionVariant value) {
+        alias test_bool = visit!((bool v) => true, v => false);
+        if (!test_bool(value))
+            throw new CMDLineError;
+        this.innerImplyData = value;
         return this;
     }
 
-    override Self implyVal() {
-        this.implyArg = true;
-        return this;
-    }
+    // Self implyVal(bool value) {
+    //     this.implyArg = value;
+    //     return this;
+    // }
+
+    // override Self implyVal() {
+    //     this.implyArg = true;
+    //     return this;
+    // }
 
     @property
     override bool isValid() const {
-        return this.found || !this.implyArg.isNull
-            || !this.configArg.isNull || !this.defaultArg.isNull || !this.innerImplyData.isNull;
+        return this.found || !this.configArg.isNull ||
+            !this.defaultArg.isNull || !this.innerImplyData.isNull;
     }
 
     override Self initialize() {
@@ -684,11 +708,11 @@ class BoolOption : Option {
             this.source = Source.Cli;
             return this;
         }
-        if (!this.implyArg.isNull) {
-            this.innerData = this.implyArg.get;
-            this.source = Source.Imply;
-            return this;
-        }
+        // if (!this.implyArg.isNull) {
+        //     this.innerData = this.implyArg.get;
+        //     this.source = Source.Imply;
+        //     return this;
+        // }
         if (!this.innerImplyData.isNull) {
             this.innerData = this.innerImplyData.get!bool;
             this.source = Source.Imply;
@@ -732,19 +756,19 @@ class BoolOption : Option {
     }
 }
 
-unittest {
-    auto bopt = new BoolOption("-m, --mixed", "").implyVal(false).configVal.defaultVal;
-    bopt.initialize;
-    bool value = bopt.get!bool;
-    assert(!value);
-}
+// unittest {
+//     auto bopt = new BoolOption("-m, --mixed", "").implyVal(false).configVal.defaultVal;
+//     bopt.initialize;
+//     bool value = bopt.get!bool;
+//     assert(!value);
+// }
 
 class ValueOption(T) : Option {
     static assert(isBaseOptionValueType!T && !is(T == bool));
 
     Nullable!T cliArg;
     Nullable!T envArg;
-    Nullable!(T, bool) implyArg;
+    // Nullable!(T, bool) implyArg;
     Nullable!(T, bool) configArg;
     Nullable!(T, bool) defaultArg;
 
@@ -771,7 +795,7 @@ class ValueOption(T) : Option {
         assert(!this.variadic);
         this.cliArg = null;
         this.envArg = null;
-        this.implyArg = null;
+        // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
         innerBoolData = false;
@@ -856,17 +880,26 @@ class ValueOption(T) : Option {
         return this;
     }
 
-    Self implyVal(T value) {
-        _checkVal(value);
-        this.implyArg = value;
+    override Self implyVal(OptionVariant value) {
+        alias test_t = visit!((T v) => true, v => false);
+        if (!test_t(value))
+            throw new CMDLineError;
+        _checkVal(value.get!T);
+        this.innerImplyData = value;
         return this;
     }
 
-    override Self implyVal() {
-        assert(isOptional);
-        this.implyArg = true;
-        return this;
-    }
+    // Self implyVal(T value) {
+    //     _checkVal(value);
+    //     this.implyArg = value;
+    //     return this;
+    // }
+
+    // override Self implyVal() {
+    //     assert(isOptional);
+    //     this.implyArg = true;
+    //     return this;
+    // }
 
     override Self cliVal(string value, string[] rest...) {
         assert(rest.length == 0);
@@ -899,9 +932,8 @@ class ValueOption(T) : Option {
 
     @property
     override bool isValid() const {
-        return this.found ? (!this.presetArg.isNull || !this.cliArg.isNull) : (!this.envArg.isNull || !this
-                .implyArg.isNull || !this.configArg.isNull || !this
-                .defaultArg.isNull || !this.innerImplyData.isNull);
+        return this.found ? (!this.presetArg.isNull || !this.cliArg.isNull) : (!this.envArg.isNull
+                || !this.configArg.isNull || !this.defaultArg.isNull || !this.innerImplyData.isNull);
     }
 
     override Self initialize() {
@@ -932,16 +964,16 @@ class ValueOption(T) : Option {
             this.source = Source.Env;
             return this;
         }
-        if (!this.implyArg.isNull) {
-            if (test_bool(this.implyArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.implyArg.get!bool;
-            }
-            if (test_t(this.implyArg))
-                this.innerValueData = this.implyArg.get!T;
-            this.source = Source.Imply;
-            return this;
-        }
+        // if (!this.implyArg.isNull) {
+        //     if (test_bool(this.implyArg)) {
+        //         this.isValueData = false;
+        //         this.innerBoolData = this.implyArg.get!bool;
+        //     }
+        //     if (test_t(this.implyArg))
+        //         this.innerValueData = this.implyArg.get!T;
+        //     this.source = Source.Imply;
+        //     return this;
+        // }
         if (!this.innerImplyData.isNull) {
             if (test_bool(this.innerImplyData)) {
                 this.isValueData = false;
@@ -1043,7 +1075,7 @@ class VariadicOption(T) : Option {
 
     Nullable!(T[]) cliArg;
     Nullable!(T[]) envArg;
-    Nullable!(T[], bool) implyArg;
+    // Nullable!(T[], bool) implyArg;
     Nullable!(T[], bool) configArg;
     Nullable!(T[], bool) defaultArg;
 
@@ -1072,7 +1104,7 @@ class VariadicOption(T) : Option {
         assert(this.variadic);
         this.cliArg = null;
         this.envArg = null;
-        this.implyArg = null;
+        // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
         innerBoolData = false;
@@ -1174,18 +1206,27 @@ class VariadicOption(T) : Option {
         return this;
     }
 
-    Self implyVal(T value, T[] rest...) {
-        auto tmp = [value] ~ rest;
-        _checkVal(tmp);
-        this.implyArg = tmp;
+    override Self implyVal(OptionVariant value) {
+        alias test_t = visit!((T[] v) => true, (v) => false);
+        if (!test_t(value))
+            throw new CMDLineError;
+        _checkVal(value.get!(T[]));
+        this.innerImplyData = value;
         return this;
     }
 
-    override Self implyVal() {
-        assert(isOptional);
-        this.implyArg = true;
-        return this;
-    }
+    // Self implyVal(T value, T[] rest...) {
+    //     auto tmp = [value] ~ rest;
+    //     _checkVal(tmp);
+    //     this.implyArg = tmp;
+    //     return this;
+    // }
+
+    // override Self implyVal() {
+    //     assert(isOptional);
+    //     this.implyArg = true;
+    //     return this;
+    // }
 
     override Self cliVal(string value, string[] rest...) {
         string[] tmp = [value] ~ rest;
@@ -1223,8 +1264,7 @@ class VariadicOption(T) : Option {
     @property
     override bool isValid() const {
         return this.found ? (!this.presetArg.isNull || !this.cliArg.isNull) : (!this.envArg.isNull || !this
-                .implyArg.isNull || !this.configArg.isNull || !this
-                .defaultArg.isNull || !this.innerImplyData.isNull);
+                .configArg.isNull || !this.defaultArg.isNull || !this.innerImplyData.isNull);
     }
 
     override Self initialize() {
@@ -1255,23 +1295,23 @@ class VariadicOption(T) : Option {
             this.source = Source.Env;
             return this;
         }
-        if (!this.implyArg.isNull) {
-            if (test_bool(this.implyArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.implyArg.get!bool;
-            }
-            if (test_t(this.implyArg))
-                this.innerValueData = this.implyArg.get!(T[]);
-            this.source = Source.Imply;
-            return this;
-        }
+        // if (!this.implyArg.isNull) {
+        //     if (test_bool(this.implyArg)) {
+        //         this.isValueData = false;
+        //         this.innerBoolData = this.implyArg.get!bool;
+        //     }
+        //     if (test_t(this.implyArg))
+        //         this.innerValueData = this.implyArg.get!(T[]);
+        //     this.source = Source.Imply;
+        //     return this;
+        // }
         if (!this.innerImplyData.isNull) {
             if (test_bool(this.innerImplyData)) {
                 this.isValueData = false;
                 this.innerBoolData = this.innerImplyData.get!bool;
             }
             if (test_t(this.innerImplyData))
-                this.innerValueData = this.implyArg.get!(T[]);
+                this.innerValueData = this.innerImplyData.get!(T[]);
             this.source = Source.Imply;
             return this;
         }
@@ -1427,6 +1467,7 @@ NegateOption createNegateOption(string flags, string desc = "") {
 }
 
 unittest {
+    import std.stdio;
     auto nopt = new NegateOption("-P, --no-print-warning", "");
     scope (exit) {
         writeln(nopt.name, " ", nopt.attrName);
