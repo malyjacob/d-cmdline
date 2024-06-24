@@ -25,6 +25,7 @@ import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
 import core.sys.posix.libgen;
+import std.typetuple;
 
 enum AddHelpPos : string {
     BeforeAll = "beforeAll",
@@ -33,7 +34,24 @@ enum AddHelpPos : string {
     AfterAll = "afterAll"
 }
 
-alias ActionCallback = void delegate(ArgVariant[], OptionVariant[string]);
+alias ActionCallback = void delegate();
+
+alias ActionCallback_0 = void delegate(in OptsWrap);
+alias ActionCallback_1 = void delegate(in OptsWrap, in ArgWrap);
+alias ActionCallback_2 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap);
+alias ActionCallback_3 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap);
+alias ActionCallback_4 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap);
+alias ActionCallback_5 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap);
+
+alias ActionCallBackSeq = AliasSeq!(
+    ActionCallback,
+    ActionCallback_0,
+    ActionCallback_1,
+    ActionCallback_2,
+    ActionCallback_3,
+    ActionCallback_4,
+    ActionCallback_5
+);
 
 class Command : EventManager {
     Command parent = null;
@@ -159,10 +177,13 @@ class Command : EventManager {
     Self command(Args...)(string nameAndArgs, string desc, string[string] execOpts = null) {
         auto cmd = createCommand!Args(nameAndArgs, desc);
         cmd._execHandler = true;
+        cmd._execFile = format("%s-%s", this._name, cmd._name);
+        cmd._execDir = ".";
         if (execOpts) {
-            auto exec_file = "execFile" in execOpts;
-            if (exec_file)
+            if (auto exec_file = "execFile" in execOpts)
                 cmd._execFile = *exec_file;
+            if (auto exec_dir = "execDir" in execOpts)
+                cmd._execDir = *exec_dir;
         }
         this._registerCommand(cmd);
         cmd.parent = this;
@@ -406,14 +427,14 @@ class Command : EventManager {
             _registerOption(opt);
             _registerOption(option);
             this.on("negate:" ~ option.name, () {
-                setOptionValDirectly(option.name, false, Source.Imply);
+                setOptionValDirectly(option.name, false, Source.Cli);
             });
         }
         else {
             _registerOption(option);
             if (opt.isBoolean)
                 this.on("negate:" ~ option.name, () {
-                    setOptionValDirectly(option.name, false, Source.Imply);
+                    setOptionValDirectly(option.name, false, Source.Cli);
                 });
             else
                 this.on("negate:" ~ option.name, () {
@@ -787,6 +808,8 @@ class Command : EventManager {
                         }
                     }
                     else {
+                        if (opt.settled && !opt.get!bool)
+                            conflctNegateOption(arg);
                         this.emit("option:" ~ name);
                     }
                     continue;
@@ -906,18 +929,34 @@ class Command : EventManager {
     }
 
     void unknownOption(string flag) const {
-        string suggestion = "";
-        string[] candidate_flags = [];
-        auto cmd = this;
-        const(string)[] more_flags;
-        auto hlp = cmd._helpConfiguration;
-        if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
-            more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
-            candidate_flags ~= more_flags;
+        string msg = "";
+        auto any_abandon = this._abandons.find!((const Option opt) => opt.isFlag(flag) || opt.name == flag);
+        if (!any_abandon.empty) {
+            msg = format("error: this option `%s` has been disable by its related negate option `--%s`",
+                any_abandon[0].flags, any_abandon[0].name);
+            this.error(msg, "command.disableOption");
         }
-        suggestion = suggestSimilar(flag, candidate_flags);
-        auto msg = format("error: unknown option `%s` %s", flag, suggestion);
-        this.error(msg, "command.unknownOption");
+        else {
+            auto cmd = this;
+            auto hlp = cmd._helpConfiguration;
+            string suggestion = "";
+            const(string)[] more_flags;
+            string[] candidate_flags = [];
+            if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
+                more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
+                candidate_flags ~= more_flags;
+            }
+            suggestion = suggestSimilar(flag, candidate_flags);
+            msg = format("error: unknown option `%s` %s", flag, suggestion);
+            this.error(msg, "command.unknownOption");
+        }
+    }
+
+    void conflctNegateOption(string flag) const {
+        string msg = format(
+            "if negate option difined on client terminal," ~
+                " then the releated option `%s` can not be", flag);
+        this.error(msg, "command.conflictNegateOption");
     }
 
     void excessArguments() const {
@@ -1009,6 +1048,10 @@ class Command : EventManager {
                 if (opt && (opt.source == Source.Default)) {
                     opt.settled = false;
                     opt.implyVal(value);
+                }
+                auto any_abandon = this._abandons.find!((const Option opt) => opt.name == name);
+                if (!opt && !any_abandon.empty) {
+                    this.unknownOption(name);
                 }
                 if (!opt) {
                     string flag = format("--%s <%s-value>", name, name);
@@ -1170,7 +1213,7 @@ class Command : EventManager {
             this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
-        ActionCallback fn = (args, optMap) {
+        ActionCallback fn = () {
             this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         };
@@ -1274,92 +1317,95 @@ class Command : EventManager {
             Value sub_config = sub_name in *config;
             this.subCommand.jconfig = sub_config;
         }
-        else {
-            Value[string] copts;
-            Value[] cargs;
-            if (Value ptr = "arguments" in *config) {
-                if (ptr.type != JSONType.ARRAY) {
-                    this.error("the `arguments`'s value must be array!");
-                }
-                ptr.array.each!((const ref JSONValue ele) {
-                    if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
-                        this.error("the `argument`'s element value cannot be object or null!");
-                    }
-                    cargs ~= &ele;
-                });
+        if (this.subCommand && this.subCommand.immediately)
+            return;
+        Value[string] copts;
+        Value[] cargs;
+        if (Value ptr = "arguments" in *config) {
+            if (ptr.type != JSONType.ARRAY) {
+                this.error("the `arguments`'s value must be array!");
             }
-            if (Value ptr = "options" in *config) {
-                if (ptr.type != JSONType.OBJECT) {
-                    this.error("the `options`'s value must be object!");
+            ptr.array.each!((const ref JSONValue ele) {
+                if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
+                    this.error("the `argument`'s element value cannot be object or null!");
                 }
-                foreach (string key, const ref JSONValue ele; ptr.object) {
-                    if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
-                        this.error("the `option`'s value cannot be object or null!");
-                    }
-                    if (ele.type == JSONType.ARRAY) {
-                        if (ele.array.length < 1)
-                            this.error("if the `option`'s value is array,
+                cargs ~= &ele;
+            });
+        }
+        if (Value ptr = "options" in *config) {
+            if (ptr.type != JSONType.OBJECT) {
+                this.error("the `options`'s value must be object!");
+            }
+            foreach (string key, const ref JSONValue ele; ptr.object) {
+                if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
+                    this.error("the `option`'s value cannot be object or null!");
+                }
+                if (ele.type == JSONType.ARRAY) {
+                    if (ele.array.length < 1)
+                        this.error("if the `option`'s value is array,
                                 then its length cannot be 0");
-                        bool all_int = ele.array.all!((ref e) => e.type == JSONType.INTEGER);
-                        bool all_double = ele.array.all!((ref e) => e.type == JSONType.FLOAT);
-                        bool all_string = ele.array.all!((ref e) => e.type == JSONType.STRING);
-                        if (!(all_int || all_double || all_string)) {
-                            this.error("if the `option`'s value is array,
+                    bool all_int = ele.array.all!((ref e) => e.type == JSONType.INTEGER);
+                    bool all_double = ele.array.all!((ref e) => e.type == JSONType.FLOAT);
+                    bool all_string = ele.array.all!((ref e) => e.type == JSONType.STRING);
+                    if (!(all_int || all_double || all_string)) {
+                        this.error("if the `option`'s value is array,
                                 then its element type must all be int or double or string the same");
-                        }
                     }
-                    copts[key] = &ele;
+                }
+                copts[key] = &ele;
+            }
+        }
+        auto get_front = () => cargs.empty ? null : cargs.front;
+        auto test_regulra = () {
+            bool all_int = cargs.all!((ref e) => e.type == JSONType.INTEGER);
+            bool all_double = cargs.all!((ref e) => e.type == JSONType.FLOAT);
+            bool all_string = cargs.all!((ref e) => e.type == JSONType.STRING);
+            if (!(all_int || all_double || all_string)) {
+                this.error(
+                    "the variadic `arguments`'s element type must all be int or double or string the same");
+            }
+        };
+        auto assign_arg_arr = (Argument arg) {
+            test_regulra();
+            auto tmp = cargs[0];
+            switch (tmp.type) {
+            case JSONType.INTEGER:
+                arg.configVal(cargs.map!((ref ele) => cast(int) ele.get!int).array);
+                break;
+            case JSONType.FLOAT:
+                arg.configVal(cargs.map!((ref ele) => cast(double) ele.get!double).array);
+                break;
+            case JSONType.STRING:
+                arg.configVal(cargs.map!((ref ele) => cast(string) ele.get!string).array);
+                break;
+            default:
+                break;
+            }
+        };
+        foreach (Argument argument; this._arguments) {
+            auto is_v = argument.variadic;
+            if (!is_v) {
+                if (Value value = get_front()) {
+                    mixin AssignOptOrArg!(argument, value);
+                    cargs.popFront();
+                }
+                else
+                    break;
+            }
+            else {
+                if (cargs.length) {
+                    assign_arg_arr(argument);
+                    break;
                 }
             }
-            auto get_front = () => cargs.empty ? null : cargs.front;
-            auto test_regulra = () {
-                bool all_int = cargs.all!((ref e) => e.type == JSONType.INTEGER);
-                bool all_double = cargs.all!((ref e) => e.type == JSONType.FLOAT);
-                bool all_string = cargs.all!((ref e) => e.type == JSONType.STRING);
-                if (!(all_int || all_double || all_string)) {
-                    this.error(
-                        "the variadic `arguments`'s element type must all be int or double or string the same");
-                }
-            };
-            auto assign_arg_arr = (Argument arg) {
-                test_regulra();
-                auto tmp = cargs[0];
-                switch (tmp.type) {
-                case JSONType.INTEGER:
-                    arg.configVal(cargs.map!((ref ele) => cast(int) ele.get!int).array);
-                    break;
-                case JSONType.FLOAT:
-                    arg.configVal(cargs.map!((ref ele) => cast(double) ele.get!double).array);
-                    break;
-                case JSONType.STRING:
-                    arg.configVal(cargs.map!((ref ele) => cast(string) ele.get!string).array);
-                    break;
-                default:
-                    break;
-                }
-            };
-            foreach (Argument argument; this._arguments) {
-                auto is_v = argument.variadic;
-                if (!is_v) {
-                    if (Value value = get_front()) {
-                        mixin AssignOptOrArg!(argument, value);
-                        cargs.popFront();
-                    }
-                    else
-                        break;
-                }
-                else {
-                    if (cargs.length) {
-                        assign_arg_arr(argument);
-                        break;
-                    }
-                }
+        }
+        foreach (string key, Value value; copts) {
+            Option opt = _findOption(key);
+            if (opt) {
+                mixin AssignOptOrArg!(opt, value);
             }
-            foreach (string key, Value value; copts) {
-                Option opt = _findOption(key);
-                if (opt) {
-                    mixin AssignOptOrArg!(opt, value);
-                }
+            else {
+                this.unknownOption(key);
             }
         }
     }
@@ -1436,9 +1482,6 @@ class Command : EventManager {
                 this.error(e.msg);
             }
         }
-        else
-            this.error(
-                "the path must be valid and the config file must be the type of xxxx.config.json");
         return null;
     }
 
@@ -1463,9 +1506,9 @@ class Command : EventManager {
                         hname, version_cmd_names));
             }
         }
-        ActionCallback fn = (args, optMap) {
-            if (args.length) {
-                auto sub_cmd_name = args[0].get!string;
+        ActionCallback_1 fn = (options, hcommand) {
+            if (hcommand) {
+                auto sub_cmd_name = hcommand.get!string;
                 auto sub_cmd = this._findCommand(sub_cmd_name);
                 auto vcmd = this._versionCommand;
                 sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
@@ -1606,7 +1649,7 @@ class Command : EventManager {
 
     Self addHelpText(AddHelpPos pos, string text) {
         assert(this._addImplicitHelpCommand || this._addImplicitHelpOption);
-        string help_event = pos.to!string ~ "Help";
+        string help_event = pos ~ "Help";
         this.on(help_event, (bool isErrMode) {
             if (text.length) {
                 auto writer = isErrMode ?
@@ -1627,34 +1670,94 @@ class Command : EventManager {
         }
     }
 
-    Self action(ActionCallback fn, bool immediately = false) {
-        this.immediately = immediately;
-        auto listener = () {
-            ArgVariant[] args;
-            OptionVariant[string] opts;
-            if (this.args)
-                args = this.args;
-            else
-                this.args = args = this._arguments
-                    .filter!(arg => arg.settled)
-                    .map!(arg => arg.get)
-                    .array;
-            if (this.opts)
-                opts = this.opts;
-            else
-                this.opts = opts = this._options
-                    .filter!(opt => opt.settled)
-                    .map!(opt => tuple(opt.name, opt.get))
-                    .assocArray;
-            fn(args, opts);
-            this._exitSuccessfully();
-        };
-        this._actionHandler = listener;
-        this.on("action:" ~ this._name, () {
-            if (this._actionHandler)
-                this._actionHandler();
-        });
-        return this;
+    mixin SetActionFn!ActionCallback;
+    mixin SetActionFn!ActionCallback_0;
+    mixin SetActionFn!ActionCallback_1;
+    mixin SetActionFn!ActionCallback_2;
+    mixin SetActionFn!ActionCallback_3;
+    mixin SetActionFn!ActionCallback_4;
+    mixin SetActionFn!ActionCallback_5;
+
+    mixin template SetActionFn(Fn) {
+        Self action(Fn fn, bool immediately = false) {
+            this.immediately = immediately;
+            enum len = Parameters!(fn).length;
+            auto listener = () {
+                static if (len == 0) {
+                    fn();
+                }
+                else {
+                    this.opts = this._options
+                        .filter!(opt => opt.settled)
+                        .map!(opt => tuple(opt.name, opt.get))
+                        .assocArray;
+                    this.args = this._arguments
+                        .filter!(arg => arg.settled)
+                        .map!(arg => arg.get)
+                        .array;
+                    OptsWrap wopts = OptsWrap(this.opts);
+                    static if (len == 1) {
+                        fn(wopts);
+                    }
+                    else {
+                        auto nlen = len - 1;
+                        ArgWrap[] wargs;
+                        if (this.args.length >= nlen) {
+                            wargs = this.args[0 .. nlen].map!((return a) => ArgWrap(a)).array;
+                        }
+                        else {
+                            wargs = this.args.map!(a => ArgWrap(a)).array;
+                            ulong less_num = nlen - this.args.length;
+                            foreach (_; 0 .. less_num) {
+                                wargs ~= ArgWrap(null);
+                            }
+                        }
+                        static if (len == 2) {
+                            fn(wopts, wargs[0]);
+                        }
+                        static if (len == 3) {
+                            fn(wopts, wargs[0], wargs[1]);
+                        }
+                        static if (len == 4) {
+                            fn(wopts, wargs[0], wargs[1], wargs[2]);
+                        }
+                        static if (len == 5) {
+                            fn(wopts, wargs[0], wargs[1], wargs[2], wargs[3]);
+                        }
+                        static if (len == 6) {
+                            fn(wopts, wargs[0], wargs[1], wargs[2], wargs[3], wargs[4]);
+                        }
+                    }
+                }
+                this._exitSuccessfully();
+            };
+            this._actionHandler = listener;
+            this.on("action:" ~ this._name, () {
+                if (this._actionHandler)
+                    this._actionHandler();
+            });
+            return this;
+        }
+    }
+
+    inout(OptsWrap) getOpts() inout {
+        return inout OptsWrap(this.opts);
+    }
+
+    ArgWrap[] getArgs() const {
+        auto len = this._arguments.length;
+        ArgWrap[] wargs;
+        if (this.args.length >= len) {
+            wargs = this.args[0 .. len].map!((return a) => ArgWrap(a)).array;
+        }
+        else {
+            wargs = this.args.map!(a => ArgWrap(a)).array;
+            ulong less_num = len - this.args.length;
+            foreach (_; 0 .. less_num) {
+                wargs ~= ArgWrap(null);
+            }
+        }
+        return wargs;
     }
 
     Self aliasName(string aliasStr) {
@@ -1933,6 +2036,41 @@ else version (Posix) {
         Tuple!(int, string) result = executeShell("stty size");
         string tmp = result[1].strip;
         return tmp.split(" ")[1].to!int;
+    }
+}
+
+struct OptsWrap {
+    private OptionVariant[string] innerValue;
+
+    inout(OptionVariant)* opCall(string member) inout {
+        return member in innerValue;
+    }
+
+    this(inout OptionVariant[string] v) inout {
+        innerValue = v;
+    }
+}
+
+struct ArgWrap {
+    private ArgNullable innerValue;
+
+    this(ArgVariant value) {
+        this.innerValue = value;
+    }
+
+    this(typeof(null) n) {
+        this.innerValue = n;
+    }
+
+    @property
+    bool isValid() const {
+        return !innerValue.isNull;
+    }
+
+    alias isValid this;
+
+    auto get(T)() const {
+        return this.innerValue.get!T;
     }
 }
 

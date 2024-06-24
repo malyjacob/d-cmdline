@@ -1,3 +1,13 @@
+/++
+$(H2 The Option Type for Cmdline)
+
+This modlue mainly has `Option` Type.
+We can set the inner value by manly way.
+And if the `Option` value is valid, then we
+can initialize it and get the inner value.
+
+Authors: 笑愚(xiaoyu)
++/
 module cmdline.option;
 
 import std.string;
@@ -15,40 +25,62 @@ import mir.algebraic;
 import cmdline.error;
 import cmdline.pattern;
 
+/// the result type after parsing the flags.
 private struct OptionFlags {
+    /// short flag
+    ///Examples: `-f`, `-s`, `-x`
     string shortFlag = "";
+    /// long flag
+    ///Examples: `--flag`, `--mixin-flag`, `--no-flag`
     string longFlag = "";
+    /// value flag
+    ///Examples: `<required>`, `[optional]`, `<variadic...>`
     string valueFlag = "";
 }
 
+/// a sequenece of inner option base type
 alias OptionBaseValue = AliasSeq!(string, int, double, bool);
+/// a sequenece of inner option array type
 alias OptionArrayValue = AliasSeq!(string[], int[], double[]);
+/// a sequenece of inner option type, equals to the union of `OptionBaseValue` and `OptionArrayValue`
 alias OptionValueSeq = AliasSeq!(OptionBaseValue, OptionArrayValue);
 
+/// a nullable variant which may contain one of type in `OptionValueSeq`
 alias OptionNullable = Nullable!OptionValueSeq;
+/// a no-nullable variant which may contain one of type in `OptionValueSeq`
 alias OptionVariant = Variant!OptionValueSeq;
 
+/// the source of the final option value gotten
 enum Source {
+    /// default value
     None,
+    /// from client terminal
     Cli,
+    /// from env
     Env,
+    /// from impled value by other options
     Imply,
+    /// from config file
     Config,
+    /// from the value that is set by user using `defaultVal` 
     Default,
+    /// from the value that is set by user using `preset`
     Preset
 }
 
+/// the callback for parsing the `string` value to the target type
 alias ParseArgFn(Target) = Target function(string str);
-
+/// furhter callback after using `ParseArgFn`
 alias ProcessArgFn(Target) = Target function(Target value);
-
+/// the callback for recursingly parsing the multiple values to only one value with same type, using in `VariadicOption` 
 alias ProcessReduceFn(Target) = Target function(Target cur, Target prev);
 
+/// a trait func for checking whether a type is base inner option value (`OptionBaseValue`)
 template isBaseOptionValueType(T) {
     enum bool isBaseOptionValueType = isBoolean!T || allSameType!(T, int) ||
         allSameType!(T, double) || allSameType!(T, string);
 }
-
+/// a trait func for checking whether a type is option inner value (`OptionValueSeq`)
 template isOptionValueType(T) {
     static if (isDynamicArray!T && !allSameType!(T, string)) {
         enum bool isOptionValueType = !is(ElementType!T == bool) && isBaseOptionValueType!(
@@ -82,10 +114,13 @@ unittest {
     assert(!test_bool(on));
 }
 
+/// Option Type
 class Option {
+    /// inner property, description for option 
     string _description;
+    /// inner property, description for default value
     string defaultValueDescription;
-
+    /// inner property, 
     bool mandatory;
 
     string flags;

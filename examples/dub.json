@@ -1,0 +1,27 @@
+{
+    "name": "examples",
+    "dependencies": {
+        "cmdline": {
+            "path": "../",
+            "version": "*"
+        }
+    },
+    "targetPath": "./bin",
+    "targetType": "executable",
+    "version": "0.0.1",
+    "dflags": [
+        "-preview=in"
+    ],
+    "configurations": [
+        {
+            "name": "deploy",
+            "targetName": "deploy",
+            "mainSourceFile": "./deploy.d"
+        },
+        {
+            "name": "str_util",
+            "targetName": "str_util",
+            "mainSourceFile": "./str_util.d"
+        }
+    ]
+}

@@ -379,7 +379,7 @@ class ValueArgument(T) : Argument {
 
     Self defaultVal(U)(U value, U[] rest...)
             if (is(U == ElementType!T) && !is(T == string)) {
-        auto tmp = rest ~ [value];
+        auto tmp = [value] ~ rest;
         _checkValSeq(tmp);
         this.defaultArg = tmp;
     }
@@ -397,7 +397,7 @@ class ValueArgument(T) : Argument {
 
     Self configVal(U)(U value, U[] rest...)
             if (is(U == ElementType!T) && !is(T == string)) {
-        auto tmp = rest ~ [value];
+        auto tmp = [value] ~ rest;
         _checkValSeq(tmp);
         this.configArg = tmp;
         return this;
@@ -425,7 +425,7 @@ class ValueArgument(T) : Argument {
             this.cliArg = tmp;
         }
         else {
-            auto tmp = (rest ~ [value]).map!(to!(ElementType!T)).array;
+            auto tmp = ([value] ~ rest).map!(to!(ElementType!T)).array;
             _checkValSeq(tmp);
             this.cliArg = tmp;
         }
