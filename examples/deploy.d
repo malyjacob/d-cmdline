@@ -4,7 +4,6 @@ import cmdline;
 import std.stdio;
 
 void main(string[] argv) {
-    Command program = createCommand("deploy");
     program.name("deploy");
     program.setVersion("0.0.1");
     program.option("-c, --config <path>", "set config path", "./deploy.conf");
@@ -14,7 +13,7 @@ void main(string[] argv) {
     setup.option("-s, --setup-mode <mode>", "Which setup mode to use", "normal");
     setup.action((in opts, in _env) {
         string mode = opts("setup-mode").get!string;
-        string env = _env.get!string;
+        string env = _env ? _env.get!string : "env";
         writefln("read config from %s", program.opts["config"].get!string);
         writefln("setup for %s env(s) with %s mode", env, mode);
     });
@@ -41,4 +40,6 @@ Examples:
     );
 
     program.parse(argv);
+    // Option test_opt = createOption!int("-t, --test <test-num>");
+    // test_opt.preset(12);
 }

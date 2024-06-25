@@ -22,6 +22,11 @@
             "name": "str_util",
             "targetName": "str_util",
             "mainSourceFile": "./str_util.d"
+        },
+        {
+            "name": "calc",
+            "targetName": "calc",
+            "mainSourceFile": "./calc.d"
         }
     ]
 }

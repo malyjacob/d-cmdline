@@ -5,8 +5,8 @@ import std.string;
 import cmdline;
 
 void main(string[] argv) {
-    Command program = createCommand("str_util");
     program
+        .name("str_util")
         .description("CLI to some string utilities")
         .setVersion("0.0.1");
 

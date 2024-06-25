@@ -17,8 +17,16 @@ class CMDLineError : Error {
 class InvalidArgumentError : CMDLineError {
     enum string name = typeof(this).stringof;
 
-    this(string msg = "") {
-        super(msg, 1, "CMDLine."~name);
+    this(string msg = "", string code = "") {
+        super(msg, 1, code);
+    }
+}
+
+class InvalidOptionError : CMDLineError {
+    enum string name = typeof(this).stringof;
+
+    this(string msg = "", string code = "") {
+        super(msg, 1, code);
     }
 }
 
