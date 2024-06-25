@@ -1,3 +1,13 @@
+/++
+$(H2 The Option Type for Cmdline)
+
+This modlue mainly has `Option` Type.
+We can set the inner value by manly way.
+And if the `Option` value is valid, then we
+can initialize it and get the inner value.
+
+Authors: 笑愚(xiaoyu)
++/
 module cmdline.option;
 
 import std.string;
@@ -15,40 +25,62 @@ import mir.algebraic;
 import cmdline.error;
 import cmdline.pattern;
 
+/// the result type after parsing the flags.
 private struct OptionFlags {
+    /// short flag
+    ///Examples: `-f`, `-s`, `-x`
     string shortFlag = "";
+    /// long flag
+    ///Examples: `--flag`, `--mixin-flag`, `--no-flag`
     string longFlag = "";
+    /// value flag
+    ///Examples: `<required>`, `[optional]`, `<variadic...>`
     string valueFlag = "";
 }
 
+/// a sequenece of inner option base type
 alias OptionBaseValue = AliasSeq!(string, int, double, bool);
+/// a sequenece of inner option array type
 alias OptionArrayValue = AliasSeq!(string[], int[], double[]);
+/// a sequenece of inner option type, equals to the union of `OptionBaseValue` and `OptionArrayValue`
 alias OptionValueSeq = AliasSeq!(OptionBaseValue, OptionArrayValue);
 
+/// a nullable variant which may contain one of type in `OptionValueSeq`
 alias OptionNullable = Nullable!OptionValueSeq;
+/// a no-nullable variant which may contain one of type in `OptionValueSeq`
 alias OptionVariant = Variant!OptionValueSeq;
 
+/// the source of the final option value gotten
 enum Source {
+    /// default value
     None,
+    /// from client terminal
     Cli,
+    /// from env
     Env,
+    /// from impled value by other options
     Imply,
+    /// from config file
     Config,
+    /// from the value that is set by user using `defaultVal` 
     Default,
+    /// from the value that is set by user using `preset`
     Preset
 }
 
+/// the callback for parsing the `string` value to the target type
 alias ParseArgFn(Target) = Target function(string str);
-
+/// furhter callback after using `ParseArgFn`
 alias ProcessArgFn(Target) = Target function(Target value);
-
+/// the callback for recursingly parsing the multiple values to only one value with same type, using in `VariadicOption` 
 alias ProcessReduceFn(Target) = Target function(Target cur, Target prev);
 
+/// a trait func for checking whether a type is base inner option value (`OptionBaseValue`)
 template isBaseOptionValueType(T) {
     enum bool isBaseOptionValueType = isBoolean!T || allSameType!(T, int) ||
         allSameType!(T, double) || allSameType!(T, string);
 }
-
+/// a trait func for checking whether a type is option inner value (`OptionValueSeq`)
 template isOptionValueType(T) {
     static if (isDynamicArray!T && !allSameType!(T, string)) {
         enum bool isOptionValueType = !is(ElementType!T == bool) && isBaseOptionValueType!(
@@ -82,10 +114,13 @@ unittest {
     assert(!test_bool(on));
 }
 
+/// Option Type
 class Option {
+    /// inner property, description for option 
     string _description;
+    /// inner property, description for default value
     string defaultValueDescription;
-
+    /// inner property, 
     bool mandatory;
 
     string flags;
@@ -123,8 +158,12 @@ class Option {
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
-        assert(longFlag.length);
-        assert((matchFirst(this.longFlag, PTN_NEGATE)).empty);
+        if (longFlag.length == 0) {
+            error("the long flag must be specified");
+        }
+        if (!matchFirst(this.longFlag, PTN_NEGATE).empty) {
+            error("the negate flag cannot be specified by `new Option`");
+        }
         this.variadic = (opt.valueFlag == "" || opt.valueFlag[$ - 2] != '.') ? false : true;
         this.valueName = opt.valueFlag == "" ? "" : this.variadic ? opt.valueFlag[1 .. $ - 4].idup
             : opt.valueFlag[1 .. $ - 1].idup;
@@ -176,7 +215,9 @@ class Option {
     }
 
     Self implies(string[] names) {
-        assert(names.length);
+        if (!names.length) {
+            error("the length of implies key cannot be zero");
+        }
         foreach (name; names) {
             bool signal = false;
             foreach (k; implyMap.byKey) {
@@ -186,7 +227,8 @@ class Option {
                 }
             }
             if (signal)
-                throw new ImplyOptionError;
+                error(format!"the implies key must be unique, here is keys: `%s`"(
+                        names.to!string));
             implyMap[name ~ ":" ~ bool.stringof] = true;
         }
         return this;
@@ -201,7 +243,7 @@ class Option {
             }
         }
         if (signal)
-            throw new ImplyOptionError;
+            error(format!"the implies key must be unique, here is keys: `%s`"(names.to!string));
         implyMap[key ~ ":" ~ T.stringof] = value;
         return this;
     }
@@ -331,17 +373,27 @@ class Option {
         else {
             auto derived = cast(ValueOption!T) this;
         }
+        if (!derived) {
+            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.defaultVal(value);
     }
 
     Self defaultVal(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
+        if (!derived) {
+            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.defaultVal(value, rest);
     }
 
     Self defaultVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (!values.length) {
+            error("the values length cannot be zero");
+        }
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
 
@@ -352,17 +404,29 @@ class Option {
         else {
             auto derived = cast(ValueOption!T) this;
         }
+        if (!derived) {
+            parsingError(
+                format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.configVal(value);
     }
 
     Self configVal(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
+        if (!derived) {
+            parsingError(
+                format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.configVal(value, rest);
     }
 
     Self configVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (!values.length) {
+            parsingError("the values length cannot be zero");
+        }
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
 
@@ -383,7 +447,9 @@ class Option {
     }
 
     Self implyVal(T)(T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (!values.length) {
+            parsingError("the values length cannot be zero");
+        }
         return implyVal(values[0], values[1 .. $]);
     }
 
@@ -410,17 +476,27 @@ class Option {
 
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
+        if (!derived) {
+            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.preset(value);
     }
 
     Self preset(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
+        if (!derived) {
+            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                    T.stringof));
+        }
         return derived.preset(value, rest);
     }
 
     Self preset(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (!values.length) {
+            error("the values length cannot be zero");
+        }
         return preset(values[0], cast(T[]) values[1 .. $]);
     }
 
@@ -559,7 +635,9 @@ Option createOption(string flags, string desc = "") {
 Option createOption(T : bool)(string flags, string desc = "") {
     auto opt = splitOptionFlags(flags);
     bool is_bool = opt.valueFlag == "";
-    assert(is_bool);
+    if (!is_bool) {
+        error("the value flag must not exist using `createOption!bool`");
+    }
     return new BoolOption(flags, desc);
 }
 
@@ -568,7 +646,9 @@ Option createOption(T)(string flags, string desc = "")
     auto opt = splitOptionFlags(flags);
     bool is_bool = opt.valueFlag == "";
     bool is_variadic = (is_bool || opt.valueFlag[$ - 2] != '.') ? false : true;
-    assert(!is_bool);
+    if (is_bool) {
+        error("the value flag must exist using `createOption!T`, while `T` is not bool");
+    }
     if (is_variadic) {
         return new VariadicOption!T(flags, desc);
     }
@@ -644,8 +724,10 @@ class BoolOption : Option {
 
     this(string flags, string description) {
         super(flags, description);
-        assert(this.isBoolean);
-        assert(!this.variadic);
+        if (!this.isBoolean || this.variadic) {
+            error(
+                "the value flag must not exist and the flag cannot contain `...` using `new BoolOption`");
+        }
         // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
@@ -677,7 +759,7 @@ class BoolOption : Option {
     override Self implyVal(OptionVariant value) {
         alias test_bool = visit!((bool v) => true, v => false);
         if (!test_bool(value))
-            throw new CMDLineError;
+            parsingError("the imply value must be a bool value");
         this.innerImplyData = value;
         return this;
     }
@@ -701,7 +783,9 @@ class BoolOption : Option {
     override Self initialize() {
         if (this.settled)
             return this;
-        assert(this.isValid);
+        if (!this.isValid) {
+            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+        }
         this.settled = true;
         if (this.found) {
             this.innerData = (true);
@@ -791,8 +875,10 @@ class ValueOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
-        assert(!this.isBoolean);
-        assert(!this.variadic);
+        if (this.isBoolean || this.variadic) {
+            error(
+                "the value flag must exist and the flag cannot contain `...` using `new ValueOption!T`");
+        }
         this.cliArg = null;
         this.envArg = null;
         // this.implyArg = null;
@@ -817,21 +903,38 @@ class ValueOption(T) : Option {
     Self choices(T[] values...) {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
-                assert(i != j);
+                if (i == j) {
+                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                            values.to!string));
+                }
             }
         }
         static if (is(T == int) || is(T == double)) {
-            assert(values.find!(val => val < this._min || val > this._max).empty);
+            if (values.any!(val => val < this._min || val > this._max)) {
+                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
+                        this.rangeOfStr(), values.to!string
+                ));
+            }
         }
         this.argChoices = values;
         return this;
     }
 
     void _checkVal(in T value) const {
-        if (!this.argChoices.empty)
-            assert(this.argChoices.count(value));
+        if (!this.argChoices.empty) {
+            if (!this.argChoices.count(value)) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.choicesStr(),
+                        value.to!string
+                ));
+            }
+        }
         static if (is(T == int) || is(T == double)) {
-            assert(value >= this._min && value <= this._max);
+            if (value < this._min || value > this._max) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.rangeOfStr(), value.to!string
+                ));
+            }
         }
     }
 
@@ -844,9 +947,19 @@ class ValueOption(T) : Option {
         }
 
         Self choices(string[] values...) {
-            auto fn = this.parseFn;
-            auto arr = values.map!fn.array;
-            return this.choices(arr);
+            try {
+                auto fn = this.parseFn;
+                auto arr = values.map!fn.array;
+                return this.choices(arr);
+            }
+            catch (ConvException e) {
+                error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    values.to!string,
+                    T.stringof
+            ));
+            }
+            return this;
         }
 
         override string rangeOfStr() const {
@@ -863,7 +976,9 @@ class ValueOption(T) : Option {
     }
 
     override Self defaultVal() {
-        assert(isOptional);
+        if (!isOptional) {
+            error("the option must be optional using `Self defaultVal()`");
+        }
         this.defaultArg = true;
         return this;
     }
@@ -875,15 +990,18 @@ class ValueOption(T) : Option {
     }
 
     override Self configVal() {
-        assert(isOptional);
+        if (!isOptional) {
+            parsingError("the option must be optional using `Self configVal()`");
+        }
         this.configArg = true;
         return this;
     }
 
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T v) => true, v => false);
-        if (!test_t(value))
-            throw new CMDLineError;
+        if (!test_t(value)) {
+            parsingError(format!"the value type must be %s"(T.stringof));
+        }
         _checkVal(value.get!T);
         this.innerImplyData = value;
         return this;
@@ -903,18 +1021,37 @@ class ValueOption(T) : Option {
 
     override Self cliVal(string value, string[] rest...) {
         assert(rest.length == 0);
-        auto tmp = this.parseFn(value);
-        _checkVal(tmp);
-        this.cliArg = tmp;
+        try {
+            auto tmp = this.parseFn(value);
+            _checkVal(tmp);
+            this.cliArg = tmp;
+        }
+        catch (ConvException e) {
+            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    value,
+                    T.stringof
+            ));
+        }
         return this;
     }
 
     override Self envVal() {
         if (this.envStr.empty)
             return this;
-        auto tmp = this.parseFn(this.envStr);
-        _checkVal(tmp);
-        this.envArg = tmp;
+        try {
+            auto tmp = this.parseFn(this.envStr);
+            _checkVal(tmp);
+            this.envArg = tmp;
+        }
+        catch (ConvException e) {
+            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    this.envStr,
+                    T.stringof
+            ));
+        }
+
         return this;
     }
 
@@ -925,7 +1062,9 @@ class ValueOption(T) : Option {
     }
 
     override Self preset() {
-        assert(isOptional);
+        if (!isOptional) {
+            error("the option must be optional using `Self preset()`");
+        }
         this.presetArg = true;
         return this;
     }
@@ -939,7 +1078,9 @@ class ValueOption(T) : Option {
     override Self initialize() {
         if (this.settled)
             return this;
-        assert(this.isValid);
+        if (!this.isValid) {
+            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+        }
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (v) => false);
         alias test_t = visit!((T v) => true, (v) => false);
@@ -1100,8 +1241,10 @@ class VariadicOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
-        assert(!this.isBoolean);
-        assert(this.variadic);
+        if (this.isBoolean || !this.variadic) {
+            error(
+                "the value flag must exist and the flag must contain `...` using `new VariadicOption!T`");
+        }
         this.cliArg = null;
         this.envArg = null;
         // this.implyArg = null;
@@ -1127,21 +1270,38 @@ class VariadicOption(T) : Option {
     Self choices(T[] values...) {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
-                assert(i != j);
+                if (i == j) {
+                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                            values.to!string));
+                }
             }
         }
         static if (is(T == int) || is(T == double)) {
-            assert(values.find!(val => val < this._min || val > this._max).empty);
+            if (values.any!(val => val < this._min || val > this._max)) {
+                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
+                        this.rangeOfStr(), values.to!string
+                ));
+            }
         }
         this.argChoices = values;
         return this;
     }
 
     void _checkVal_impl(in T value) const {
-        if (!this.argChoices.empty)
-            assert(this.argChoices.count(value));
+        if (!this.argChoices.empty) {
+            if (!this.argChoices.count(value)) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.choicesStr(),
+                        value.to!string
+                ));
+            }
+        }
         static if (is(T == int) || is(T == double)) {
-            assert(value >= this._min && value <= this._max);
+            if (value < this._min || value > this._max) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.rangeOfStr(), value.to!string
+                ));
+            }
         }
     }
 
@@ -1168,9 +1328,19 @@ class VariadicOption(T) : Option {
         }
 
         Self choices(string[] values...) {
-            auto fn = this.parseFn;
-            auto arr = values.map!fn.array;
-            return this.choices(arr);
+            try {
+                auto fn = this.parseFn;
+                auto arr = values.map!fn.array;
+                return this.choices(arr);
+            }
+            catch (ConvException e) {
+                error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    values.to!string,
+                    T.stringof
+            ));
+            }
+            return this;
         }
 
         override string rangeOfStr() const {
@@ -1188,7 +1358,9 @@ class VariadicOption(T) : Option {
     }
 
     override Self defaultVal() {
-        assert(isOptional);
+        if (!isOptional) {
+            error("the option must be optional using `Self defaultVal()`");
+        }
         this.defaultArg = true;
         return this;
     }
@@ -1201,15 +1373,18 @@ class VariadicOption(T) : Option {
     }
 
     override Self configVal() {
-        assert(isOptional);
+        if (!isOptional) {
+            parsingError("the option must be optional using `Self configVal()`");
+        }
         this.configArg = true;
         return this;
     }
 
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T[] v) => true, (v) => false);
-        if (!test_t(value))
-            throw new CMDLineError;
+        if (!test_t(value)) {
+            parsingError(format!"the value type must be %s"((T[]).stringof));
+        }
         _checkVal(value.get!(T[]));
         this.innerImplyData = value;
         return this;
@@ -1229,22 +1404,40 @@ class VariadicOption(T) : Option {
     // }
 
     override Self cliVal(string value, string[] rest...) {
-        string[] tmp = [value] ~ rest;
-        auto fn = parseFn;
-        auto xtmp = tmp.map!(fn).array;
-        _checkVal(xtmp);
-        this.cliArg = xtmp;
+        try {
+            string[] tmp = [value] ~ rest;
+            auto fn = parseFn;
+            auto xtmp = tmp.map!(fn).array;
+            _checkVal(xtmp);
+            this.cliArg = xtmp;
+        }
+        catch (ConvException e) {
+            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    ([value] ~ rest).to!string,
+                    T.stringof
+            ));
+        }
         return this;
     }
 
     override Self envVal() {
         if (this.envStr.empty)
             return this;
-        string[] str_arr = split(this.envStr, regex(`;`)).filter!(v => v != "").array;
-        auto fn = parseFn;
-        auto tmp = str_arr.map!(fn).array;
-        _checkVal(tmp);
-        this.envArg = tmp;
+        try {
+            string[] str_arr = split(this.envStr, regex(`;`)).filter!(v => v != "").array;
+            auto fn = parseFn;
+            auto tmp = str_arr.map!(fn).array;
+            _checkVal(tmp);
+            this.envArg = tmp;
+        }
+        catch (ConvException e) {
+            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                    this.name,
+                    this.envStr,
+                    T.stringof
+            ));
+        }
         return this;
     }
 
@@ -1256,7 +1449,9 @@ class VariadicOption(T) : Option {
     }
 
     override Self preset() {
-        assert(isOptional);
+        if (!isOptional) {
+            error("the option must be optional using `Self preset()`");
+        }
         this.presetArg = true;
         return this;
     }
@@ -1270,7 +1465,9 @@ class VariadicOption(T) : Option {
     override Self initialize() {
         if (this.settled)
             return this;
-        assert(this.isValid);
+        if (!this.isValid) {
+            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+        }
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (v) => false);
         alias test_t = visit!((T[] v) => true, (v) => false);
@@ -1433,7 +1630,9 @@ class NegateOption {
         auto opt = splitOptionFlags(flags);
         this.shortFlag = opt.shortFlag;
         this.longFlag = opt.longFlag;
-        assert(!(matchFirst(this.longFlag, PTN_NEGATE)).empty);
+        if ((matchFirst(this.longFlag, PTN_NEGATE)).empty) {
+            error("the long flag must star with `--no-` using `new NegateOption`");
+        }
     }
 
     bool matchFlag(in NegateOption other) const {
@@ -1468,6 +1667,7 @@ NegateOption createNegateOption(string flags, string desc = "") {
 
 unittest {
     import std.stdio;
+
     auto nopt = new NegateOption("-P, --no-print-warning", "");
     scope (exit) {
         writeln(nopt.name, " ", nopt.attrName);
@@ -1501,7 +1701,7 @@ package OptionFlags splitOptionFlags(string flags) {
     string short_flag = "", long_flag = "", value_flag = "";
     string[] flag_arr = flags.split(PTN_SP);
     if (flag_arr.length > 3)
-        throw new OptionFlagsError("");
+        error(format!"error type of flag `%s`"(flags));
     foreach (const ref string flag; flag_arr) {
         if (!matchAll(flag, PTN_SHORT).empty) {
             short_flag = flag;
@@ -1517,6 +1717,23 @@ package OptionFlags splitOptionFlags(string flags) {
         }
     }
     return OptionFlags(short_flag, long_flag, value_flag);
+}
+
+bool testType(T)(in OptionNullable value) {
+    if (is(T == typeof(null)) && value.isNull)
+        return true;
+    if (!is(T == typeof(null)) && value.isNull)
+        return false;
+    alias test_t = visit!((T v) => true, v => false);
+    return test_t(value);
+}
+
+void error(string msg = "", string code = "option.error") {
+    throw new CMDLineError(msg, 1, code);
+}
+
+void parsingError(string msg = "", string code = "option.error") {
+    throw new InvalidOptionError(msg, code);
 }
 
 unittest {

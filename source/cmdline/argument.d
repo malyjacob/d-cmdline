@@ -4,6 +4,8 @@ import std.conv;
 import std.range.primitives;
 import std.algorithm;
 import std.array;
+import std.format;
+
 import mir.algebraic;
 
 import cmdline.error;
@@ -132,33 +134,53 @@ class Argument {
 
     Self defaultVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
+        if (!derived) {
+            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"
+            (T.stringof));
+        }
         return derived.defaultVal(value);
     }
 
     Self defaultVal(T)(T value, T[] rest...)
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
+        if (!derived) {
+            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"
+            (T.stringof));
+        }
         return derived.defaultVal(value, rest);
     }
 
     Self defaultVal(T)(in T[] values) if (isBaseArgValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (values.length == 0) {
+            error(format!"the default value's num of argument `%s` cannot be zero"(this._name));
+        }
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
 
     Self configVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
+        if (!derived) {
+            parsingError(format!"the value type is `%s` while argument the inner type is not the type or related array type"
+            (T.stringof));
+        }
         return derived.configVal(value);
     }
 
     Self configVal(T)(T value, T[] rest...)
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
+        if (!derived) {
+            parsingError(format!"the value type is `%s` while argument the inner type is not the type or related array type"
+            (T.stringof));
+        }
         return derived.configVal(value, rest);
     }
 
     Self configVal(T)(in T[] values) if (isBaseArgValueType!T && !is(T == bool)) {
-        assert(values.length > 0);
+        if (values.length == 0) {
+            error(format!"the default value's num of argument `%s` cannot be zero"(this._name));
+        }
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
 
@@ -196,7 +218,9 @@ Argument createArgument(string flag, string desc = "") {
 
 Argument createArgument(T : bool)(string flag, string desc = "") {
     bool is_variadic = flag[$ - 2] == '.';
-    assert(!is_variadic);
+    if (is_variadic) {
+        error(format!"the flag `%s` cannot contain `...`"(flag));
+    }
     return new ValueArgument!bool(flag, desc);
 }
 
@@ -214,7 +238,9 @@ Argument createArgument(T)(string flag, string desc = "")
 Argument createArgument(T : U[], U)(string flag, string desc = "")
         if (!is(U == bool) && isBaseArgValueType!U) {
     bool is_variadic = flag[$ - 2] == '.';
-    assert(is_variadic);
+    if (!is_variadic) {
+        error(format!"the flag `%s` must contain `...`"(flag));
+    }
     return new ValueArgument!T(flag, desc);
 }
 
@@ -250,7 +276,7 @@ unittest {
 
     assert(arg1.get == 24);
     assert(arg2.get == 1.77);
-    assert(arg3.get == ["brother", "son"]);
+    assert(arg3.get == ["son", "brother"]);
 
     writeln(arg1.typeStr);
     writeln(arg1.defaultValStr);
@@ -303,11 +329,18 @@ class ValueArgument(T) : Argument {
     Self choices(U)(U[] values...) if (isBaseArgValueType!T && is(U == T)) {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
-                assert(i != j);
+                if (i == j) {
+                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                            values.to!string));
+                }
             }
         }
         static if (is(T == int) || is(T == double)) {
-            assert(values.find!(val => val < this._min || val > this._max).empty);
+            if (values.any!(val => val < this._min || val > this._max)) {
+                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
+                        this.rangeOfStr(), values.to!string
+                ));
+            }
         }
         this.argChoices = values;
         return this;
@@ -316,30 +349,57 @@ class ValueArgument(T) : Argument {
     Self choices(U)(U[] values...) if (is(U == ElementType!T) && !is(T == string)) {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
-                assert(i != j);
+                if (i == j) {
+                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                            values.to!string));
+                }
             }
         }
         static if (is(T == int[]) || is(T == double[])) {
-            assert(values.find!(val => val < this._min || val > this._max).empty);
+            if (values.any!(val => val < this._min || val > this._max)) {
+                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
+                        this.rangeOfStr(), values.to!string
+                ));
+            }
         }
         this.argChoices = values;
         return this;
     }
 
     void _checkVal(U)(in U value) const if (isBaseArgValueType!T && is(U == T)) {
-        if (!this.argChoices.empty)
-            assert(this.argChoices.count(value));
+        if (!this.argChoices.empty) {
+            if (!this.argChoices.count(value)) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.choicesStr(),
+                        value.to!string
+                ));
+            }
+        }
         static if (is(T == int) || is(T == double)) {
-            assert(value >= this._min && value <= this._max);
+            if (value < this._min || value > this._max) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.rangeOfStr(), value.to!string
+                ));
+            }
         }
     }
 
     void _checkVal(U)(in U value) const
     if (is(U == ElementType!T) && !is(T == string)) {
-        if (!this.argChoices.empty)
-            assert(this.argChoices.count(value));
+        if (!this.argChoices.empty) {
+            if (!this.argChoices.count(value)) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.choicesStr(),
+                        value.to!string
+                ));
+            }
+        }
         static if (is(T == int[]) || is(T == double[])) {
-            assert(value >= this._min && value <= this._max);
+            if (value < this._min || value > this._max) {
+                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                        this.rangeOfStr(), value.to!string
+                ));
+            }
         }
     }
 
@@ -379,7 +439,7 @@ class ValueArgument(T) : Argument {
 
     Self defaultVal(U)(U value, U[] rest...)
             if (is(U == ElementType!T) && !is(T == string)) {
-        auto tmp = rest ~ [value];
+        auto tmp = [value] ~ rest;
         _checkValSeq(tmp);
         this.defaultArg = tmp;
     }
@@ -397,7 +457,7 @@ class ValueArgument(T) : Argument {
 
     Self configVal(U)(U value, U[] rest...)
             if (is(U == ElementType!T) && !is(T == string)) {
-        auto tmp = rest ~ [value];
+        auto tmp = [value] ~ rest;
         _checkValSeq(tmp);
         this.configArg = tmp;
         return this;
@@ -420,14 +480,32 @@ class ValueArgument(T) : Argument {
     override Self cliVal(string value, string[] rest...) {
         static if (isBaseArgValueType!T) {
             assert(rest.empty);
-            auto tmp = value.to!T;
-            _checkVal(tmp);
-            this.cliArg = tmp;
+            try {
+                auto tmp = value.to!T;
+                _checkVal(tmp);
+                this.cliArg = tmp;
+            }
+            catch (ConvException e) {
+                parsingError(format!"on argument `%s` cannot convert the input `%s` to type `%s`"(
+                        this._name,
+                        value,
+                        T.stringof
+                ));
+            }
         }
         else {
-            auto tmp = (rest ~ [value]).map!(to!(ElementType!T)).array;
-            _checkValSeq(tmp);
-            this.cliArg = tmp;
+            try {
+                auto tmp = ([value] ~ rest).map!(to!(ElementType!T)).array;
+                _checkValSeq(tmp);
+                this.cliArg = tmp;
+            }
+            catch (ConvException e) {
+                parsingError(format!"on argument `%s` cannot convert the input `%s` to type `%s`"(
+                        this._name,
+                        ([value] ~ rest).to!string,
+                        T.stringof
+                ));
+            }
         }
         return this;
     }
@@ -438,7 +516,9 @@ class ValueArgument(T) : Argument {
     }
 
     override Self initialize() {
-        assert(this.isValid);
+        if (!this.isValid) {
+            parsingError(format!"the argument `%s` must valid before initializing"(this._name));
+        }
         this.settled = true;
         if (!cliArg.isNull) {
             innerData = cliArg.get!T;
@@ -460,7 +540,7 @@ class ValueArgument(T) : Argument {
 
     @property
     override ArgVariant get() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         T result;
         static if (is(ElementType!T == void)) {
             result = this.innerData;
@@ -473,7 +553,7 @@ class ValueArgument(T) : Argument {
 
     @property
     T get(U : T)() const {
-        assert(this.isValid && this.settled);
+        assert(this.settled);
         return this.innerData;
     }
 
@@ -491,6 +571,14 @@ class ValueArgument(T) : Argument {
     override string choicesStr() const {
         if (argChoices.empty)
             return "";
-        return "choices " ~ argChoices.to!string;
+        return "choices: " ~ argChoices.to!string;
     }
+}
+
+void error(string msg = "", string code = "argument.error") {
+    throw new CMDLineError(msg, 1, code);
+}
+
+void parsingError(string msg = "", string code = "argument.error") {
+    throw new InvalidArgumentError(msg, code);
 }
