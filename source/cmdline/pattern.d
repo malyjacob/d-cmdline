@@ -12,6 +12,7 @@ __gshared Regex!char PTN_CMDNAMEANDARGS;
 __gshared Regex!char PTN_IMPLYMAPKEY;
 __gshared Regex!char PTN_MANUALINDENT;
 __gshared Regex!char PTN_LONGASSIGN;
+__gshared Regex!char PTN_EXECUTABLE;
 
 shared static this() {
     PTN_SHORT = regex(`^-\w$`, "g");
@@ -23,6 +24,7 @@ shared static this() {
     PTN_IMPLYMAPKEY = regex(`([(?:\w\-)\w]+\w)\:((\w+)(\[\])?)`, "g");
     PTN_MANUALINDENT = regex(`[\n][ \f\t\v]+`);
     PTN_LONGASSIGN = regex(`^(--[(?:\w\-)\w]+\w)=([\S]+)`, "g");
+    PTN_EXECUTABLE = regex(`[(?:\w\-)\w]*\w(\.exe$)?`);
 }
 
 unittest {

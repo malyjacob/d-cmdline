@@ -14,6 +14,24 @@
     ],
     "configurations": [
         {
+            "name": "all-debug",
+            "targetType": "none",
+            "preGenerateCommands": [
+                "\"$DUB\" build -c deploy",
+                "\"$DUB\" build -c str_util",
+                "\"$DUB\" build -c calc"
+            ]
+        },
+        {
+            "name": "all-release",
+            "targetType": "none",
+            "preGenerateCommands": [
+                "\"$DUB\" build -c deploy -b release",
+                "\"$DUB\" build -c str_util -b release",
+                "\"$DUB\" build -c calc -b release"
+            ]
+        },
+        {
             "name": "deploy",
             "targetName": "deploy",
             "mainSourceFile": "./deploy.d"

@@ -119,7 +119,8 @@ class Help {
             cmd._name ~
                 (cmd._aliasNames.empty ? "" : "|" ~ cmd._aliasNames[0]) ~
                 (cmd._options.empty ? "" : " [options]") ~
-                (args_str == "" ? args_str : " " ~ args_str)
+                (args_str == "" ? args_str : " " ~ args_str) ~
+                (cmd._execHandler ? " >> " ~ cmd._usage : "")
         );
     }
 

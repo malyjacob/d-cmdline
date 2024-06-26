@@ -23,6 +23,7 @@ alias isArgValueType(T) = isOptionValueType!T;
 alias ArgMemberFnCallError = cmdline.error.OptionMemberFnCallError;
 
 class Argument {
+package:
     string _description;
     string defaultDescription;
     bool required;
@@ -61,6 +62,7 @@ class Argument {
 
     alias Self = typeof(this);
 
+public:
     string description() const {
         return "description: " ~ this._description;
     }
@@ -135,8 +137,8 @@ class Argument {
     Self defaultVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"
-            (T.stringof));
+            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"(
+                    T.stringof));
         }
         return derived.defaultVal(value);
     }
@@ -145,8 +147,8 @@ class Argument {
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"
-            (T.stringof));
+            error(format!"the value type is `%s` while the argument inner type is not the type or related array type"(
+                    T.stringof));
         }
         return derived.defaultVal(value, rest);
     }
@@ -158,11 +160,13 @@ class Argument {
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
 
+package:
     Self configVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
         if (!derived) {
-            parsingError(format!"the value type is `%s` while argument the inner type is not the type or related array type"
-            (T.stringof));
+            parsingError(
+                format!"the value type is `%s` while argument the inner type is not the type or related array type"(
+                    T.stringof));
         }
         return derived.configVal(value);
     }
@@ -171,8 +175,9 @@ class Argument {
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
         if (!derived) {
-            parsingError(format!"the value type is `%s` while argument the inner type is not the type or related array type"
-            (T.stringof));
+            parsingError(
+                format!"the value type is `%s` while argument the inner type is not the type or related array type"(
+                    T.stringof));
         }
         return derived.configVal(value, rest);
     }
@@ -184,6 +189,7 @@ class Argument {
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
 
+public:
     T get(T)() const {
         return this.get.get!T;
     }
@@ -291,7 +297,7 @@ unittest {
     writeln(arg3.choicesStr);
 }
 
-class ValueArgument(T) : Argument {
+package class ValueArgument(T) : Argument {
     static assert(isArgValueType!T);
     Nullable!T cliArg;
     Nullable!T configArg;
@@ -575,10 +581,10 @@ class ValueArgument(T) : Argument {
     }
 }
 
-void error(string msg = "", string code = "argument.error") {
+private void error(string msg = "", string code = "argument.error") {
     throw new CMDLineError(msg, 1, code);
 }
 
-void parsingError(string msg = "", string code = "argument.error") {
+private void parsingError(string msg = "", string code = "argument.error") {
     throw new InvalidArgumentError(msg, code);
 }

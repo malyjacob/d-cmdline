@@ -26,7 +26,7 @@ import cmdline.error;
 import cmdline.pattern;
 
 /// the result type after parsing the flags.
-private struct OptionFlags {
+package struct OptionFlags {
     /// short flag
     ///Examples: `-f`, `-s`, `-x`
     string shortFlag = "";
@@ -116,6 +116,7 @@ unittest {
 
 /// Option Type
 class Option {
+package:
     /// inner property, description for option 
     string _description;
     /// inner property, description for default value
@@ -184,6 +185,7 @@ class Option {
         this.innerImplyData = null;
     }
 
+public:
     string description() const {
         return "description: " ~ this._description;
     }
@@ -273,6 +275,7 @@ class Option {
         return _camelCase(this.name);
     }
 
+    package
     @property
     string envStr() const {
         auto raw = environment.get(this.envKey);
@@ -397,6 +400,7 @@ class Option {
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
 
+package:
     Self configVal(T)(T value) if (isBaseOptionValueType!T) {
         static if (is(T == bool)) {
             auto derived = cast(BoolOption) this;
@@ -473,7 +477,7 @@ class Option {
     //     assert(values.length > 0);
     //     return implyVal(values[0], cast(T[]) values[1 .. $]);
     // }
-
+public:
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
         if (!derived) {
@@ -715,7 +719,7 @@ unittest {
     assert(opts[2].get!(int[]) == [13, 14, 15]);
 }
 
-class BoolOption : Option {
+package class BoolOption : Option {
     // Nullable!bool implyArg;
     Nullable!bool configArg;
     Nullable!bool defaultArg;
@@ -847,7 +851,7 @@ class BoolOption : Option {
 //     assert(!value);
 // }
 
-class ValueOption(T) : Option {
+package class ValueOption(T) : Option {
     static assert(isBaseOptionValueType!T && !is(T == bool));
 
     Nullable!T cliArg;
@@ -1211,7 +1215,7 @@ unittest {
     assert(vopt.get == 125);
 }
 
-class VariadicOption(T) : Option {
+package class VariadicOption(T) : Option {
     static assert(isBaseOptionValueType!T && !is(T == bool));
 
     Nullable!(T[]) cliArg;
@@ -1616,6 +1620,7 @@ unittest {
 }
 
 class NegateOption {
+package:
     string shortFlag;
     string longFlag;
     string flags;
@@ -1635,6 +1640,7 @@ class NegateOption {
         }
     }
 
+public:
     bool matchFlag(in NegateOption other) const {
         return this.longFlag == other.longFlag ||
             (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
@@ -1719,7 +1725,7 @@ package OptionFlags splitOptionFlags(string flags) {
     return OptionFlags(short_flag, long_flag, value_flag);
 }
 
-bool testType(T)(in OptionNullable value) {
+package bool testType(T)(in OptionNullable value) {
     if (is(T == typeof(null)) && value.isNull)
         return true;
     if (!is(T == typeof(null)) && value.isNull)
@@ -1728,11 +1734,11 @@ bool testType(T)(in OptionNullable value) {
     return test_t(value);
 }
 
-void error(string msg = "", string code = "option.error") {
+private void error(string msg = "", string code = "option.error") {
     throw new CMDLineError(msg, 1, code);
 }
 
-void parsingError(string msg = "", string code = "option.error") {
+private void parsingError(string msg = "", string code = "option.error") {
     throw new InvalidOptionError(msg, code);
 }
 

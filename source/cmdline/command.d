@@ -14,6 +14,7 @@ import std.algorithm;
 import std.format;
 import std.file;
 import std.path;
+import std.typetuple;
 import std.json;
 
 import cmdline.error;
@@ -24,8 +25,6 @@ import cmdline.pattern;
 import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
-import core.sys.posix.libgen;
-import std.typetuple;
 
 enum AddHelpPos : string {
     BeforeAll = "beforeAll",
@@ -54,6 +53,7 @@ alias ActionCallBackSeq = AliasSeq!(
 );
 
 class Command : EventManager {
+package:
     Command parent = null;
     Command[] _commands = [];
 
@@ -77,6 +77,7 @@ class Command : EventManager {
     bool _execHandler = false;
     string _execFile = "";
     string _execDir = "";
+    string[string] _externalCmdHelpFlagMap = null;
 
     string[] rawFlags = [];
     string[] argFlags = [];
@@ -87,8 +88,8 @@ class Command : EventManager {
 
     bool immediately = false;
 
-    ArgVariant[] args = [];
-    OptionVariant[string] opts = null;
+    public ArgVariant[] args = [];
+    public OptionVariant[string] opts = null;
 
     bool _allowExcessArguments = true;
     bool _showHelpAfterError = true;
@@ -118,7 +119,7 @@ class Command : EventManager {
 
     alias Self = typeof(this);
 
-    Self copyInheritedSettings(Command src) {
+    public Self copyInheritedSettings(Command src) {
         this._allowExcessArguments = src._allowExcessArguments;
         this._showHelpAfterError = src._showHelpAfterError;
         this._showSuggestionAfterError = src._showSuggestionAfterError;
@@ -136,6 +137,7 @@ class Command : EventManager {
         return cast(inout(Command)[]) result;
     }
 
+public:
     string description() const {
         return "description: " ~ this._description;
     }
@@ -183,14 +185,37 @@ class Command : EventManager {
         }
         cmd._execDir = dirName(thisExePath());
         if (execOpts) {
-            if (auto exec_file = "execFile" in execOpts)
-                cmd._execFile = *exec_file;
-            if (auto exec_dir = "execDir" in execOpts)
+            if (auto exec_file = "file" in execOpts) {
+                string tmp = strip(*exec_file);
+                auto cp = matchFirst(tmp, PTN_EXECUTABLE);
+                if (cp.empty)
+                    error("error format of excutable file: " ~ tmp);
+                version (Windows) {
+                    tmp = cp[1].empty ? tmp ~ ".exe" : tmp;
+                }
+                else version (Posix) {
+                    tmp = !cp[1].empty ? tmp[0 .. $ - 4] : tmp;
+                }
+                cmd._execFile = tmp;
+            }
+            if (auto exec_dir = "dir" in execOpts)
                 cmd._execDir = *exec_dir;
+            if (auto exec_help_flag = "help" in execOpts) {
+                this._externalCmdHelpFlagMap[cmd._name] = *exec_help_flag;
+            }
         }
-        this._registerCommand(cmd);
+        if (!this._externalCmdHelpFlagMap || !(cmd._name in this._externalCmdHelpFlagMap))
+            this._externalCmdHelpFlagMap[cmd._name] = "--help";
+        cmd.usage(format!"run `%s %s --help` to see"(this._name, cmd._name));
         cmd.parent = this;
-        cmd.copyInheritedSettings(this);
+        cmd._allowExcessArguments = true;
+        cmd._showHelpAfterError = false;
+        cmd._showSuggestionAfterError = false;
+        cmd._combineFlagAndOptionalValue = false;
+        cmd._outputConfiguration = null;
+        cmd._helpConfiguration = null;
+        cmd.disableHelp();
+        this._registerCommand(cmd);
         return this;
     }
 
@@ -227,6 +252,7 @@ class Command : EventManager {
         return this;
     }
 
+package:
     void _registerArgument(Argument arg) {
         auto other = _findArgument(arg._name);
         if (other) {
@@ -380,6 +406,7 @@ class Command : EventManager {
         this._negates ~= option;
     }
 
+public:
     Self addOption(Option option) {
         this._registerOption(option);
         bool is_required = option.isRequired;
@@ -470,14 +497,14 @@ class Command : EventManager {
         return this;
     }
 
-    Self _optionImpl(T, bool isMandatory = false)(string flags, string desc)
+    package Self _optionImpl(T, bool isMandatory = false)(string flags, string desc)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
         option.makeMandatory(isMandatory);
         return this.addOption(option);
     }
 
-    Self _optionImpl(string flags, string desc) {
+    package Self _optionImpl(string flags, string desc) {
         auto lflag = splitOptionFlags(flags).longFlag;
         auto is_negate = !matchFirst(lflag, PTN_NEGATE).empty;
         if (is_negate) {
@@ -506,7 +533,7 @@ class Command : EventManager {
         return _optionImpl!(bool, true)(flags, desc);
     }
 
-    Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
+    package Self _optionImpl(T, bool isMandatory = false)(string flags, string desc, T defaultValue)
             if (isOptionValueType!T) {
         auto option = createOption!T(flags, desc);
         option.makeMandatory(isMandatory);
@@ -706,7 +733,7 @@ class Command : EventManager {
         assert(0);
     }
 
-    void execSubCommand(in string[] unknowns) {
+    package void execSubCommand(in string[] unknowns) {
         string sub_path = buildPath(_execDir, _execFile);
         const(string)[] inputs;
         if (!(sub_path[0] == '"' && sub_path[$ - 1] == '"') && sub_path.any!(c => c == ' ')) {
@@ -718,13 +745,17 @@ class Command : EventManager {
                 inputs ~= new_str;
             }
         });
-        auto result = executeShell(sub_path ~ " " ~ unknowns.join(" "));
-        if (result.status == 0) {
-            writeln(result.output.chomp());
+        string output;
+        try {
+            auto result = executeShell(sub_path ~ " " ~ unknowns.join(" "));
+            output = result.output;
+            this._outputConfiguration.writeOut(output);
             this._exitSuccessfully();
         }
-        else {
-            this.parsingError(result.output.chomp(), "command.execCommandError");
+        catch (ProcessException e) {
+            auto writer = this._outputConfiguration.writeErr;
+            writer(output);
+            this._exit(1);
         }
     }
 
@@ -741,6 +772,7 @@ class Command : EventManager {
         }
     }
 
+package:
     string[] _prepareUserArgs(in string[] args) {
         auto arr = args.filter!(str => str.length).array;
         this._selfPath = arr[0];
@@ -1189,6 +1221,7 @@ class Command : EventManager {
         }
     }
 
+public:
     Self name(string str) {
         this._name = str;
         return this;
@@ -1389,9 +1422,9 @@ class Command : EventManager {
         return this;
     }
 
-    void parseConfigOptionsImpl(const(JSONValue)* config) {
+    package void parseConfigOptionsImpl(const(JSONValue)* config) {
         alias Value = const(JSONValue)*;
-        if (this.subCommand && !this.subCommand._actionHandler) {
+        if (this.subCommand && !this.subCommand._execHandler) {
             string sub_name = this.subCommand._name;
             Value sub_config = sub_name in *config;
             this.subCommand.jconfig = sub_config;
@@ -1490,7 +1523,7 @@ class Command : EventManager {
         }
     }
 
-    mixin template AssignOptOrArg(alias target, alias src)
+    private mixin template AssignOptOrArg(alias target, alias src)
             if (is(typeof(src) == const(JSONValue)*)) {
         static if (is(typeof(target) == Argument)) {
             Argument arg = target;
@@ -1550,7 +1583,7 @@ class Command : EventManager {
         auto _x_Inner_ff = assign();
     }
 
-    JSONValue* _processConfigFile(string envKey) const {
+    package JSONValue* _processConfigFile(string envKey) const {
         string path_to_config = environment[envKey];
         if (path_to_config.length > 12 && path_to_config[$ - 12 .. $] == ".config.json"
             && exists(path_to_config)) {
@@ -1588,13 +1621,16 @@ class Command : EventManager {
             }
         }
         ActionCallback_1 fn = (options, hcommand) {
-            if (hcommand) {
+            if (hcommand.isValid) {
                 auto sub_cmd_name = hcommand.get!string;
                 auto sub_cmd = this._findCommand(sub_cmd_name);
                 auto vcmd = this._versionCommand;
                 sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
                 if (!sub_cmd || sub_cmd._hidden)
                     this.parsingError("can not find the sub command `" ~ sub_cmd_name ~ "`!");
+                if (sub_cmd._execHandler) {
+                    sub_cmd.execSubCommand([this._externalCmdHelpFlagMap[sub_cmd._name]]);
+                }
                 sub_cmd.help();
             }
             this.help();
@@ -1635,7 +1671,7 @@ class Command : EventManager {
         return this.setHelpCommand(flags, desc);
     }
 
-    Command _getHelpCommand() {
+    package Command _getHelpCommand() {
         if (!this._addImplicitHelpCommand)
             return null;
         if (!this._helpCommand)
@@ -1691,7 +1727,7 @@ class Command : EventManager {
         return this;
     }
 
-    Option _getHelpOption() {
+    package Option _getHelpOption() {
         if (!this._addImplicitHelpCommand)
             return null;
         if (!this._helpOption)
@@ -1699,7 +1735,7 @@ class Command : EventManager {
         return this._helpOption;
     }
 
-    void outputHelp(bool isErrorMode = false) const {
+    package void outputHelp(bool isErrorMode = false) const {
         auto writer = isErrorMode ?
             this._outputConfiguration.writeErr : this._outputConfiguration.writeOut;
         auto ancestors = cast(Command[]) _getCommandAndAncestors();
@@ -1741,7 +1777,7 @@ class Command : EventManager {
         return this;
     }
 
-    void _outputHelpIfRequested(string[] flags) {
+    package void _outputHelpIfRequested(string[] flags) {
         auto help_opt = this._getHelpOption();
         bool help_requested = help_opt !is null &&
             !flags.find!(flag => help_opt.isFlag(flag)).empty;
@@ -1751,16 +1787,12 @@ class Command : EventManager {
         }
     }
 
-    mixin SetActionFn!ActionCallback;
-    mixin SetActionFn!ActionCallback_0;
-    mixin SetActionFn!ActionCallback_1;
-    mixin SetActionFn!ActionCallback_2;
-    mixin SetActionFn!ActionCallback_3;
-    mixin SetActionFn!ActionCallback_4;
-    mixin SetActionFn!ActionCallback_5;
+    static foreach (Action; ActionCallBackSeq) {
+        mixin SetActionFn!Action;
+    }
 
-    mixin template SetActionFn(Fn) {
-        Self action(Fn fn, bool immediately = false) {
+    private mixin template SetActionFn(Fn) {
+        public Self action(Fn fn, bool immediately = false) {
             this.immediately = immediately;
             enum len = Parameters!(fn).length;
             auto listener = () {
@@ -1878,6 +1910,7 @@ class Command : EventManager {
         return this._aliasNames;
     }
 
+package:
     inout(Argument) _findArgument(string name) inout {
         auto validate = (inout Argument arg) { return name == arg._name; };
         auto tmp = this._arguments.find!validate;
@@ -1903,6 +1936,7 @@ class Command : EventManager {
         return tmp.empty ? null : tmp[0];
     }
 
+public:
     Self addArgument(Argument argument) {
         auto args = this._arguments;
         Argument prev_arg = args.length ? args[$ - 1] : null;
@@ -1989,6 +2023,7 @@ class Command : EventManager {
         return this;
     }
 
+package:
     void _exitErr(string msg, string code = "") const {
         this._outputConfiguration.writeErr("ERROR:\t" ~ msg ~ " " ~ code ~ "\n");
         if (this._showHelpAfterError) {
@@ -2009,14 +2044,15 @@ class Command : EventManager {
         exit(exitCode);
     }
 
-    void parsingError(string msg = "", string code = "command.error") const {
+    private void parsingError(string msg = "", string code = "command.error") const {
         this._exitErr(msg, code);
     }
 
-    void error(string msg = "", string code = "command.error") const {
+    private void error(string msg = "", string code = "command.error") const {
         throw new CMDLineError(msg, 1, code);
     }
 
+public:
     string usage() const {
         if (this._usage == "") {
             string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
@@ -2050,6 +2086,11 @@ class Command : EventManager {
             command._usage = str;
         return this;
     }
+
+    alias findCommand = _findCommand;
+    alias findOption = _findOption;
+    alias findNOption = _findNegateOption;
+    alias findArgument = _findArgument;
 }
 
 unittest {
@@ -2111,7 +2152,7 @@ class OutputConfiguration {
 }
 
 version (Windows) {
-    int _getOutHelpWidth() {
+    package int _getOutHelpWidth() {
         HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
         CONSOLE_SCREEN_BUFFER_INFO csbi;
         GetConsoleScreenBufferInfo(hConsole, &csbi);
@@ -2119,7 +2160,7 @@ version (Windows) {
     }
 }
 else version (Posix) {
-    int _getOutHelpWidth() {
+    package int _getOutHelpWidth() {
         Tuple!(int, string) result = executeShell("stty size");
         string tmp = result[1].strip;
         return tmp.split(" ")[1].to!int;
@@ -2129,7 +2170,7 @@ else version (Posix) {
 struct OptsWrap {
     private OptionVariant[string] innerValue;
 
-    inout(ArgWrap) opCall(string member) inout {
+    ArgWrap opCall(string member) const {
         auto ptr = member in innerValue;
         if (ptr) {
             return ArgWrap(*ptr);
@@ -2138,7 +2179,7 @@ struct OptsWrap {
             return ArgWrap(null);
     }
 
-    this(inout OptionVariant[string] v) inout {
+    package this(inout OptionVariant[string] v) inout {
         innerValue = v;
     }
 }
@@ -2146,11 +2187,11 @@ struct OptsWrap {
 struct ArgWrap {
     private ArgNullable innerValue;
 
-    this(ArgVariant value) {
+    package this(in ArgVariant value) {
         this.innerValue = value;
     }
 
-    this(typeof(null) n) {
+    package this(typeof(null) n) {
         this.innerValue = n;
     }
 
@@ -2177,14 +2218,10 @@ struct ArgWrap {
         this.innerValue = value;
         return this;
     }
-}
 
-unittest {
-    ArgVariant av = 13;
-    ArgWrap aw = ArgWrap(av);
-    assert(aw.verifyType!(int));
-    aw = "string";
-    assert(aw.verifyType!(string));
+    T opCast(T)() const if (isArgValueType!T) {
+        return this.get!T;
+    }
 }
 
 unittest {
