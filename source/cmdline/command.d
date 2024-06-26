@@ -212,7 +212,7 @@ public:
         cmd._showHelpAfterError = false;
         cmd._showSuggestionAfterError = false;
         cmd._combineFlagAndOptionalValue = false;
-        cmd._outputConfiguration = null;
+        cmd._outputConfiguration = this._outputConfiguration;
         cmd._helpConfiguration = null;
         cmd.disableHelp();
         this._registerCommand(cmd);
@@ -744,17 +744,17 @@ public:
                 string new_str = '"' ~ str ~ '"';
                 inputs ~= new_str;
             }
+            else {
+                inputs ~= str;
+            }
         });
-        string output;
-        try {
-            auto result = executeShell(sub_path ~ " " ~ unknowns.join(" "));
-            output = result.output;
-            this._outputConfiguration.writeOut(output);
+        auto result = executeShell(sub_path ~ " " ~ inputs.join(" "));
+        if (result.status == 0) {
+            this._outputConfiguration.writeOut(result.output);
             this._exitSuccessfully();
         }
-        catch (ProcessException e) {
-            auto writer = this._outputConfiguration.writeErr;
-            writer(output);
+        else {
+            this._outputConfiguration.writeErr(result.output);
             this._exit(1);
         }
     }
@@ -1629,7 +1629,9 @@ public:
                 if (!sub_cmd || sub_cmd._hidden)
                     this.parsingError("can not find the sub command `" ~ sub_cmd_name ~ "`!");
                 if (sub_cmd._execHandler) {
-                    sub_cmd.execSubCommand([this._externalCmdHelpFlagMap[sub_cmd._name]]);
+                    sub_cmd.execSubCommand([
+                        this._externalCmdHelpFlagMap[sub_cmd._name]
+                    ]);
                 }
                 sub_cmd.help();
             }
