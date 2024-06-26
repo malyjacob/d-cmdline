@@ -19,7 +19,7 @@ void main(in string[] argv) {
         "first": "the first operand",
         "second": "the second operaand"
     ]);
-    program.addHelpText(AddHelpPos.Before, `
+    program.addHelpText(AddHelpPos.After, `
 Examples:
     $ calc 12 13
     $ calc 23 45 -o
@@ -35,8 +35,8 @@ Examples:
     program.addOption(op_opt);
 
     program.action((opts, _first, _second) {
-        double first = _first.get!double;
-        double second = _second.get!double;
+        double first = cast(double) _first;
+        double second = cast(double) _second;
         string op = opts("operator").get!string;
         switch (op) {
         case "+":
