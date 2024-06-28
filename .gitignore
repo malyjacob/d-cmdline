@@ -18,3 +18,7 @@ cmdline-test-*
 build
 .vscode
 bin/*
+
+/examples/bin/*
+!/examples/bin/*.config.json
+
