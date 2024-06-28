@@ -781,6 +781,39 @@ package:
     }
 
     void _parseCommand(in string[] unknowns) {
+        auto has_cmd = (const string str) {
+            auto _cmd = _findCommand(str);
+            auto vcmd = this._versionCommand;
+            auto hcmd = this._helpCommand;
+            _cmd = !_cmd && vcmd && vcmd._name == str ? vcmd : _cmd;
+            _cmd = !_cmd && hcmd && hcmd._name == str ? hcmd : _cmd;
+            return _cmd ? true : (this._addImplicitHelpCommand && str == "help");
+        };
+        auto has_hvopt = (const string str) {
+            auto vopt = this._versionOption;
+            auto hopt = this._helpOption;
+            auto _opt = vopt && vopt.isFlag(str) ? vopt : null;
+            _opt = !_opt && hopt && hopt.isFlag(str) ? hopt : null;
+            return _opt ? true : (this._addImplicitHelpOption &&
+                    (str == "--help" || str == "-h"));
+        };
+        if (!this._defaultCommandName.empty &&
+            unknowns.all!(str => !has_cmd(str) && !has_hvopt(str))) {
+            auto cmd = _findCommand(this._defaultCommandName);
+            if (!cmd)
+                parsingError("cannot find the default sub command `"
+                        ~ this._defaultCommandName ~ "`");
+            if (this._configOption && !cmd._execHandler) {
+                auto j_config = _processConfigFile(this.configEnvKey);
+                if (j_config) {
+                    auto cmd_name = cmd._name;
+                    auto cmd_j_config = cmd_name in *j_config;
+                    cmd.jconfig = cmd_j_config;
+                }
+            }
+            cmd._parseCommand(unknowns);
+            return;
+        }
         this.parseOptionsEnv();
         auto parsed = this.parseOptions(unknowns);
         this.argFlags = parsed[0];
@@ -803,8 +836,9 @@ package:
         if (this.subCommand) {
             this.subCommand._parseCommand(parsed[1]);
         }
-        else
+        else {
             this.emit("action:" ~ this._name);
+        }
     }
 
     Tuple!(string[], string[]) parseOptions(in string[] argv) {
@@ -1030,7 +1064,7 @@ package:
     }
 
     void optionMissingArgument(in Option opt) const {
-        string message = format("error: option '%s' argument missing", opt.flags);
+        string message = format("option '%s' argument missing", opt.flags);
         this.parsingError(message);
     }
 
@@ -1039,7 +1073,7 @@ package:
         auto any_abandon = this._abandons.find!((const Option opt) => opt.isFlag(
                 flag) || opt.name == flag);
         if (!any_abandon.empty) {
-            msg = format("error: this option `%s` has been disable by its related negate option `--%s`",
+            msg = format("this option `%s` has been disable by its related negate option `--%s`",
                 any_abandon[0].flags, any_abandon[0].name);
             this.parsingError(msg, "command.disableOption");
         }
@@ -1377,11 +1411,11 @@ public:
             string base_name = baseName(exePath);
         }
         else version (Windows)
-            string base_name = baseName(exePath)[0 .. $ - 3];
+            string base_name = baseName(exePath)[0 .. $ - 4];
         desc = desc == "" ?
             format("define the path to the config file," ~
                     "if not specified, the config file name would be" ~
-                    " `%s.config.json` and it is on the dir where `%s`situates on",
+                    " `%s.config.json` and it is on the dir where `%s` situates on",
                 this._name, base_name) : desc;
         string tmp = (this.name ~ "-config-path").replaceAll(regex(`-`), "_").toUpper;
         envKey = envKey.empty ? tmp : envKey;
@@ -1802,14 +1836,14 @@ public:
                     fn();
                 }
                 else {
-                    this.opts = this._options
+                    this.opts = this.opts is null ? this._options
                         .filter!(opt => opt.settled)
                         .map!(opt => tuple(opt.name, opt.get))
-                        .assocArray;
-                    this.args = this._arguments
+                        .assocArray : this.opts;
+                    this.args = this.args.empty ? this._arguments
                         .filter!(arg => arg.settled)
                         .map!(arg => arg.get)
-                        .array;
+                        .array : this.args;
                     OptsWrap wopts = OptsWrap(this.opts);
                     static if (len == 1) {
                         fn(wopts);

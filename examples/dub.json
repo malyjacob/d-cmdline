@@ -19,7 +19,9 @@
             "preGenerateCommands": [
                 "\"$DUB\" build -c deploy",
                 "\"$DUB\" build -c str_util",
-                "\"$DUB\" build -c calc"
+                "\"$DUB\" build -c calc",
+                "\"$DUB\" build -c cheese",
+                "\"$DUB\" build -c defcmd"
             ]
         },
         {
@@ -28,7 +30,9 @@
             "preGenerateCommands": [
                 "\"$DUB\" build -c deploy -b release",
                 "\"$DUB\" build -c str_util -b release",
-                "\"$DUB\" build -c calc -b release"
+                "\"$DUB\" build -c calc -b release",
+                "\"$DUB\" build -c cheese -b release",
+                "\"$DUB\" build -c defcmd -b release"
             ]
         },
         {
@@ -45,6 +49,16 @@
             "name": "calc",
             "targetName": "calc",
             "mainSourceFile": "./calc.d"
+        },
+        {
+            "name": "cheese",
+            "targetName": "cheese",
+            "mainSourceFile": "./cheese.d"
+        },
+        {
+            "name": "defcmd",
+            "targetName": "defcmd",
+            "mainSourceFile": "./defcmd.d"
         }
     ]
 }
