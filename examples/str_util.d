@@ -26,8 +26,7 @@ void main(string[] argv) {
     join.option("-s, --seperator <char>", "separator character", ",");
     join.action((in OptsWrap opts, in ArgWrap _strs) {
         string sp = opts("seperator").get!string;
-        auto strs = _strs.get!(string[]);
-        writeln(typeof(strs).stringof);
+        auto strs = cast(string[]) _strs;
         writeln(strs.join(sp));
     });
 

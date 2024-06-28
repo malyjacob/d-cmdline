@@ -1730,7 +1730,7 @@ package bool testType(T)(in OptionNullable value) {
         return true;
     if (!is(T == typeof(null)) && value.isNull)
         return false;
-    alias test_t = visit!((T v) => true, v => false);
+    alias test_t = visit!((const T v) => true, v => false);
     return test_t(value);
 }
 
