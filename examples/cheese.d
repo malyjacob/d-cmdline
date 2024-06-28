@@ -5,6 +5,7 @@ import cmdline;
 
 void main(in string[] argv) {
     program.name("cheese");
+    program.sortOptions();
 
     program.option("--no-sauce", "Remove sauce");
     program.option("--cheese <flavor>", "cheese flavor", "mozzarella");

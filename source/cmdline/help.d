@@ -275,6 +275,11 @@ class Help {
             output ~= [this.wrap(cmd_desc, this.helpWidth, 0), ""];
         }
 
+        if (!cmd._defaultCommandName.empty) {
+            string str = format!"default sub command is `%s`"(cmd._defaultCommandName);
+            output ~= [this.wrap(str, this.helpWidth, 0), ""];
+        }
+
         string[] arg_list = visibleArguments(cmd).map!(
             arg => format_item(argumentTerm(arg), argumentDesc(arg))).array;
         if (arg_list.length) {

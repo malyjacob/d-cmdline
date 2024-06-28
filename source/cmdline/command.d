@@ -687,26 +687,26 @@ public:
         return this;
     }
 
-    inout(OptionVariant) getOptionVal(string key) inout {
+    ArgWrap getOptionVal(string key) const {
         if (this.opts && key in this.opts)
-            return this.opts[key];
+            return ArgWrap(this.opts[key]);
         auto opt = this._findOption(key);
         if (!opt) {
             this.error(format!"option `%s` doesn't exist"(key));
         }
-        return opt.get;
+        return ArgWrap(opt.get);
     }
 
-    inout(OptionVariant) getOptionValWithGlobal(string key) inout {
+    ArgWrap getOptionValWithGlobal(string key) const {
         auto cmds = this._getCommandAndAncestors();
         foreach (cmd; cmds) {
             if (cmd.opts && key in cmd.opts)
-                return cmd.opts[key];
+                return ArgWrap(this.opts[key]);
             auto opt = this._findOption(key);
             if (!opt) {
                 this.error(format!"option `%s` doesn't exist"(key));
             }
-            return opt.get;
+            return ArgWrap(opt.get);
         }
         this.error(format!"cannot get the option `%s`'s value"(key));
         assert(0);
@@ -1810,6 +1810,21 @@ public:
                 writer(text ~ "\n");
             }
         });
+        return this;
+    }
+
+    Self sortSubCommands(bool enable = true) {
+        this._helpConfiguration.sortSubCommands = enable;
+        return this;
+    }
+
+    Self sortOptions(bool enable = true) {
+        this._helpConfiguration.sortOptions = enable;
+        return this;
+    }
+
+    Self showGlobalOptions(bool enable = true) {
+        this._helpConfiguration.showGlobalOptions = enable;
         return this;
     }
 
