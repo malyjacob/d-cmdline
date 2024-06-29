@@ -1,3 +1,13 @@
+/++
+$(H2 The Command Type for Cmdline)
+
+This modlue mainly has `Command` Type.
+
+we can configure the command in manly way
+and then use `Command.parse` to parse the input command line.
+if you define its action callback, this callback would be called when parsing. 
+Authors: 笑愚(xiaoyu)
++/
 module cmdline.command;
 
 import std.stdio;
@@ -26,6 +36,7 @@ import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
 
+/// the enum represents the position of appendent help text
 enum AddHelpPos : string {
     BeforeAll = "beforeAll",
     Before = "before",
@@ -33,15 +44,23 @@ enum AddHelpPos : string {
     AfterAll = "afterAll"
 }
 
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback = void delegate();
 
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_0 = void delegate(in OptsWrap);
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_1 = void delegate(in OptsWrap, in ArgWrap);
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_2 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap);
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_3 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap);
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_4 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap);
+/// the callback passed as a parameter of `this.action`
 alias ActionCallback_5 = void delegate(in OptsWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap, in ArgWrap);
 
+/// the sequence of action callbacks
 alias ActionCallBackSeq = AliasSeq!(
     ActionCallback,
     ActionCallback_0,
@@ -52,6 +71,7 @@ alias ActionCallBackSeq = AliasSeq!(
     ActionCallback_5
 );
 
+/// Command Type
 class Command : EventManager {
 package:
     Command parent = null;
@@ -119,6 +139,7 @@ package:
 
     alias Self = typeof(this);
 
+    /// inherit the basic configuration from another command
     public Self copyInheritedSettings(Command src) {
         this._allowExcessArguments = src._allowExcessArguments;
         this._showHelpAfterError = src._showHelpAfterError;
@@ -138,10 +159,12 @@ package:
     }
 
 public:
+    /// get the description of command
     string description() const {
         return "description: " ~ this._description;
     }
 
+    /// set the description of command
     Self description(string str, string[string] argsDesc = null) {
         this._description = str;
         if (argsDesc !is null)
@@ -149,15 +172,26 @@ public:
         return this;
     }
 
+    /// configurre the help
     Self configureHelp(Help helpConfig) {
         this._helpConfiguration = helpConfig;
         return this;
     }
 
+    /// get the help configuration
     inout(Help) configureHelp() inout {
         return this._helpConfiguration;
     }
 
+    /// define a sub command and sub command's arguments,
+    /// this sub command inherit the basic configuration of parent command
+    /// Params:
+    ///   nameAndArgs = like `sub <arg1> [arg2] [arg3...]`
+    ///   cmdOpts = controll the behavior,
+    ///             `isDefault` determine whether this sub command is default sub command,
+    ///             `hidden` determine whether this sub command is hidden out of help
+    /// `Args`: that is type sequence of the arguments' type sequence
+    /// Returns: the sub command that you define
     Command command(Args...)(string nameAndArgs, bool[string] cmdOpts = null) {
         auto cmd = createCommand!Args(nameAndArgs);
         this._registerCommand(cmd);
@@ -174,6 +208,15 @@ public:
         return cmd;
     }
 
+    /// define a sub command, which represents the external command line program
+    /// Params:
+    ///   name = only the name of this sub command
+    ///   desc = the description of this sub command
+    ///   execOpts = controll the behavior,
+    ///              `file` the file name of external command line program,
+    ///              `dir` the directory that external command line program situates on
+    ///              `help` the help option of this external command line program, which is useful when invoke the help of this sub command
+    /// Returns: `Self` for chain call
     Self command(string name, string desc, string[string] execOpts = null) {
         auto cmd = createCommand(name, desc);
         cmd._execHandler = true;
@@ -219,6 +262,12 @@ public:
         return this;
     }
 
+    /// add the sub command, which is often used when you want more detail configuration of sub command
+    /// Params:
+    ///   cmd = the command used as the sub command
+    ///   cmdOpts = see also `this.command(Args...)(string nameAndArgs, bool[string] cmdOpts = null)`
+    /// `Args`: see alos `this.command(Args...)(string nameAndArgs, bool[string] cmdOpts = null)`
+    /// Returns: `Self` for chain call
     Self addCommand(Command cmd, bool[string] cmdOpts) {
         if (!cmd._name.length) {
             this.error("Command passed to .addCommand() must have a name
@@ -238,6 +287,11 @@ public:
         return this;
     }
 
+    /// define the arguments' descriptions
+    /// Params:
+    ///   argName = the argument's name
+    ///   desc = the description of the argument
+    /// Returns: `Self` for chain call
     Self argumentDesc(string argName, string desc) {
         auto arg = _findArgument(argName);
         if (arg)
@@ -245,6 +299,10 @@ public:
         return this;
     }
 
+    /// define the arguments' descriptions
+    /// Params:
+    ///   descMap = the map of arguments' description, key is the name of argument
+    /// Returns: `Self` for chain call
     Self argumentDesc(string[string] descMap) {
         foreach (argName, desc; descMap) {
             argumentDesc(argName, desc);
@@ -407,6 +465,7 @@ package:
     }
 
 public:
+    /// add the option to command
     Self addOption(Option option) {
         this._registerOption(option);
         bool is_required = option.isRequired;
@@ -451,6 +510,7 @@ public:
         return this;
     }
 
+    /// add the negate option to command
     Self addOption(NegateOption option) {
         auto opt = _findOption(option.name);
         if (!opt) {
@@ -476,6 +536,7 @@ public:
         return this;
     }
 
+    /// add the action option to command, which will invoke the callback we injected when parsing the flag of this option, only useful in client cmd
     Self addActionOption(Option option, void delegate(string[] vals...) call_back, bool endMode = true) {
         this._registerOption(option);
         string name = option.name;
@@ -517,18 +578,22 @@ public:
         }
     }
 
+    /// define a value/variadic option to this command
     Self option(T)(string flags, string desc) {
         return _optionImpl!(T)(flags, desc);
     }
 
+    /// define a bool option to this command
     Self option(string flags, string desc) {
         return _optionImpl(flags, desc);
     }
 
+    /// define a mandatory value/variadic option to this command
     Self requiredOption(T)(string flags, string desc) {
         return _optionImpl!(T, true)(flags, desc);
     }
 
+    /// define a mandatory bool option to this command
     Self requireOption(string flags, string desc) {
         return _optionImpl!(bool, true)(flags, desc);
     }
@@ -541,14 +606,17 @@ public:
         return this.addOption(option);
     }
 
+    /// see also `Self option(T)(string flags, string desc)` and define a default value for this option
     Self option(T)(string flags, string desc, T defaultValue) {
         return _optionImpl(flags, desc, defaultValue);
     }
 
+    /// see also `Self requiredOption(T)(string flags, string desc)` and define a default value for this option
     Self requiredOption(T)(string flags, string desc, T defaultValue) {
         return _optionImpl!(T, true)(flags, desc, defaultValue);
     }
 
+package:
     Self setOptionVal(Source src, T)(string key, T value) if (isOptionValueType!T) {
         Option opt = this._findOption(key);
         if (!opt) {
@@ -687,51 +755,60 @@ public:
         return this;
     }
 
+public:
+    /// get the inner value of a option by flag wrapped by `ArgWrap`.
+    /// remember better use it in action callabck or after parsing
+    /// Params:
+    ///   key = the flag of option
+    /// Returns: the value wrapped by `ArgWrap`, which may be empty when cannot find the option
     ArgWrap getOptionVal(string key) const {
-        if (this.opts && key in this.opts)
-            return ArgWrap(this.opts[key]);
-        auto opt = this._findOption(key);
-        if (!opt) {
-            this.error(format!"option `%s` doesn't exist"(key));
+        if (!this.opts) {
+            this.error("the options has not been initialized, cannnot get the value of option now");
         }
-        return ArgWrap(opt.get);
+        auto ptr = key in this.opts;
+        return ptr ? ArgWrap(*ptr) : ArgWrap(null);
     }
 
-    ArgWrap getOptionValWithGlobal(string key) const {
-        auto cmds = this._getCommandAndAncestors();
-        foreach (cmd; cmds) {
-            if (cmd.opts && key in cmd.opts)
-                return ArgWrap(this.opts[key]);
-            auto opt = this._findOption(key);
-            if (!opt) {
-                this.error(format!"option `%s` doesn't exist"(key));
-            }
-            return ArgWrap(opt.get);
-        }
-        this.error(format!"cannot get the option `%s`'s value"(key));
-        assert(0);
-    }
+    // ArgWrap getOptionValWithGlobal(string key) const {
+    //     auto cmds = this._getCommandAndAncestors();
+    //     foreach (cmd; cmds) {
+    //         if (cmd.opts && key in cmd.opts)
+    //             return ArgWrap(this.opts[key]);
+    //         auto opt = this._findOption(key);
+    //         if (!opt) {
+    //             this.error(format!"option `%s` doesn't exist"(key));
+    //         }
+    //         return ArgWrap(opt.get);
+    //     }
+    //     this.error(format!"cannot get the option `%s`'s value"(key));
+    //     assert(0);
+    // }
 
+    /// get the source of option
+    /// remember better use it in action callabck or after parsing
+    /// Params:
+    ///   key = the flag of option
+    /// Returns: the source of option final value in `Source`
     Source getOptionValSource(string key) const {
         auto opt = this._findOption(key);
-        if (!opt) {
-            this.error(format!"option `%s` doesn't exist"(key));
+        if (!opt || !opt.settled) {
+            this.error(format!"option `%s` doesn't exist or not settled"(key));
         }
         return opt.source;
     }
 
-    Source getOptionValWithGlobalSource(string key) const {
-        auto cmds = this._getCommandAndAncestors();
-        foreach (cmd; cmds) {
-            auto opt = this._findOption(key);
-            if (!opt) {
-                this.error(format!"option `%s` doesn't exist"(key));
-            }
-            return opt.source;
-        }
-        this.error(format!"cannot get the option `%s`'s source"(key));
-        assert(0);
-    }
+    // Source getOptionValWithGlobalSource(string key) const {
+    //     auto cmds = this._getCommandAndAncestors();
+    //     foreach (cmd; cmds) {
+    //         auto opt = this._findOption(key);
+    //         if (!opt) {
+    //             this.error(format!"option `%s` doesn't exist"(key));
+    //         }
+    //         return opt.source;
+    //     }
+    //     this.error(format!"cannot get the option `%s`'s source"(key));
+    //     assert(0);
+    // }
 
     package void execSubCommand(in string[] unknowns) {
         string sub_path = buildPath(_execDir, _execFile);
@@ -759,6 +836,9 @@ public:
         }
     }
 
+    /// parse the command line argument variables
+    /// Params:
+    ///   argv = the command line argument variables
     void parse(in string[] argv) {
         auto user_argv = _prepareUserArgs(argv);
         try {
@@ -1256,15 +1336,24 @@ package:
     }
 
 public:
+    /// set the name of command
     Self name(string str) {
         this._name = str;
         return this;
     }
 
+    /// get the name of command
     string name() const {
         return this._name.idup;
     }
 
+    /// set the version of the command.
+    /// if `flags` and `desc` not defined, then it will automatically set the version option flag `-V, --version` and version command name `version` 
+    /// Params:
+    ///   str = the version string like `0.0.1`
+    ///   flags = the version option flag, which is a `bool` option
+    ///   desc = the description of the version command and version option
+    /// Returns: `Self` for chain call
     Self setVersion(string str, string flags = "", string desc = "") {
         this._version = str;
         setVersionOption(flags, desc);
@@ -1273,10 +1362,12 @@ public:
         return this;
     }
 
+    /// get the version string of this command, if not set version, the default is `*`
     string getVersion() const {
         return this._version.idup;
     }
 
+    /// set the version option of the command, see also `Self setVersion(string str, string flags = "", string desc = "")`
     Self setVersionOption(string flags = "", string desc = "") {
         assert(!this._versionOption);
         flags = flags == "" ? "-V, --version" : flags;
@@ -1305,10 +1396,16 @@ public:
         return this;
     }
 
+    /// set the version option of the command, see also `Self setVersion(string str, string flags = "", string desc = "")`
     Self addVersionOption(string flags = "", string desc = "") {
         return setVersionOption(flags, desc);
     }
 
+    /// custom the version option
+    /// Params:
+    ///   opt = the version option
+    ///   action = the action callback when parsing the flag of version option, if `null`, then do nothing and exit mutely
+    /// Returns: `Self` for chain call
     Self addVersionOption(Option opt, void delegate() action = null) {
         assert(!this._versionOption);
         this._versionOption = opt;
@@ -1326,6 +1423,7 @@ public:
         return this;
     }
 
+    /// set version command, see also `Self setVersion(string str, string flags = "", string desc = "")`
     Self setVersionCommand(string flags = "", string desc = "") {
         assert(!this._versionCommand);
         flags = flags == "" ? "version" : flags;
@@ -1369,10 +1467,12 @@ public:
         return this;
     }
 
+    /// set version command, see also `Self setVersion(string str, string flags = "", string desc = "")`
     Self addVersionCommand(string flags = "", string desc = "") {
         return setVersionCommand(flags, desc);
     }
 
+    /// set version command, see also `Self setVersion(string str, string flags = "", string desc = "")`
     Self addVersionCommand(Command cmd) {
         assert(!this._versionCommand);
         string vname = cmd._name;
@@ -1402,6 +1502,14 @@ public:
         return this;
     }
 
+    /// set the config option, if `flags` not defined, then config option's flags is `-C, --config <config-path>`;
+    /// if `desc not defined, then description is by default;
+    /// if `envKey` not defined, then the `envKey` would be `${PROGRAM_NAME}_CONFIG_PATH`, which automatically store the path to config file
+    /// Params:
+    ///   flags = the flags of config option
+    ///   desc = the description of config option
+    ///   envKey = the envKey of an env variable that store the destination of config file
+    /// Returns: 
     Self setConfigOption(string flags = "", string desc = "", string envKey = "") {
         assert(!this._configOption);
         flags = flags == "" ? "-C, --config <config-path>" : flags;
@@ -1632,6 +1740,7 @@ public:
         return null;
     }
 
+    /// set the help command
     Self setHelpCommand(string flags = "", string desc = "") {
         assert(!this._helpCommand);
         bool has_sub_cmd = this._versionCommand !is null || !this._commands.find!(
@@ -1677,11 +1786,13 @@ public:
         return setHelpCommand(true);
     }
 
+    /// enable or disable the help command
     Self setHelpCommand(bool enable) {
         this._addImplicitHelpCommand = enable;
         return this;
     }
 
+    /// add the help command
     Self addHelpCommand(Command cmd) {
         assert(!this._helpCommand);
         string[] hnames = cmd._aliasNames ~ cmd._name;
@@ -1703,6 +1814,7 @@ public:
         return setHelpCommand(true);
     }
 
+    /// add the help command
     Self addHelpCommand(string flags = "", string desc = "") {
         return this.setHelpCommand(flags, desc);
     }
@@ -1715,6 +1827,7 @@ public:
         return this._helpCommand;
     }
 
+    /// set the help option
     Self setHelpOption(string flags = "", string desc = "") {
         assert(!this._helpOption);
         flags = flags == "" ? "-h, --help" : flags;
@@ -1735,11 +1848,13 @@ public:
         return setHelpOption(true);
     }
 
+    /// enable the help option or not
     Self setHelpOption(bool enable) {
         this._addImplicitHelpOption = enable;
         return this;
     }
 
+    /// add the help option
     Self addHelpOption(Option option, void delegate() action = null) {
         assert(!this._helpOption);
         this._helpOption = option;
@@ -1753,10 +1868,12 @@ public:
         return setHelpOption(true);
     }
 
+    /// add the help option
     Self addHelpOption(string flags = "", string desc = "") {
         return this.setHelpOption(flags, desc);
     }
 
+    /// disable the help support
     Self disableHelp() {
         setHelpCommand(false);
         setHelpOption(false);
@@ -1786,6 +1903,10 @@ public:
         );
     }
 
+    /// generate the help info
+    /// Params:
+    ///   isErrorMode = turn on the error mode, which would make the info output to this command's error output
+    /// Returns: the string of help info
     string helpInfo(bool isErrorMode = false) const {
         auto helper = cast(Help) this._helpConfiguration;
         helper.helpWidth = isErrorMode ?
@@ -1793,6 +1914,9 @@ public:
         return helper.formatHelp(this);
     }
 
+    /// invoke the help if the help support is not disabled
+    /// Params:
+    ///   isErrorMode = turn on the error mode, which would make the info output to this command's error output
     void help(bool isErrorMode = false) {
         this.outputHelp(isErrorMode);
         if (isErrorMode)
@@ -1800,6 +1924,11 @@ public:
         this._exit(0);
     }
 
+    /// add a appendent help text at specified position
+    /// Params:
+    ///   pos = the postion to insert at
+    ///   text = the appendent hlp text
+    /// Returns: `Self` for chain call
     Self addHelpText(AddHelpPos pos, string text) {
         assert(this._addImplicitHelpCommand || this._addImplicitHelpOption);
         string help_event = pos ~ "Help";
@@ -1813,16 +1942,19 @@ public:
         return this;
     }
 
+    /// whether sort sub commands when invoke help, default: false
     Self sortSubCommands(bool enable = true) {
         this._helpConfiguration.sortSubCommands = enable;
         return this;
     }
 
+    /// whether sort sub options when invoke help, default: false
     Self sortOptions(bool enable = true) {
         this._helpConfiguration.sortOptions = enable;
         return this;
     }
 
+    /// whether show the global options when invoke help, default: false
     Self showGlobalOptions(bool enable = true) {
         this._helpConfiguration.showGlobalOptions = enable;
         return this;
@@ -1839,6 +1971,9 @@ public:
     }
 
     static foreach (Action; ActionCallBackSeq) {
+        /// define the action at the end of parsing
+        /// Params:
+        ///   Fn = the action call back
         mixin SetActionFn!Action;
     }
 
@@ -1904,10 +2039,12 @@ public:
         }
     }
 
+    /// get the options' value map wrap by `OptsWrap`. remember use it after parsing or at the action callabck
     inout(OptsWrap) getOpts() inout {
         return inout OptsWrap(this.opts);
     }
 
+    /// get the array of arguments' value wrap by `ArgWrap`. remember use it after parsing or at the action callabck
     ArgWrap[] getArgs() const {
         auto len = this._arguments.length;
         ArgWrap[] wargs;
@@ -1924,6 +2061,7 @@ public:
         return wargs;
     }
 
+    /// set the alias of command
     Self aliasName(string aliasStr) {
         Command command = this;
         if (this._commands.length != 0 && this._commands[$ - 1]._execHandler) {
@@ -1945,6 +2083,7 @@ public:
         return this;
     }
 
+    /// get the first alias of command
     string aliasName() const {
         if (this._aliasNames.length == 0) {
             this.error("the num of alias names cannot be zero");
@@ -1952,11 +2091,13 @@ public:
         return this._aliasNames[0];
     }
 
+    /// set a sequence of aliases of command
     Self aliasNames(string[] aliasStrs) {
         aliasStrs.each!(str => this.aliasName(str));
         return this;
     }
 
+    /// get the sequence of aliases of command
     const(string[]) aliasNames() const {
         return this._aliasNames;
     }
@@ -1988,6 +2129,7 @@ package:
     }
 
 public:
+    /// add argument for command
     Self addArgument(Argument argument) {
         auto args = this._arguments;
         Argument prev_arg = args.length ? args[$ - 1] : null;
@@ -2005,12 +2147,14 @@ public:
         return this;
     }
 
+    /// define the argument for command
     Self argument(T)(string name, string desc = "") if (isArgValueType!T) {
         auto arg = createArgument!T(name, desc);
         this.addArgument(arg);
         return this;
     }
 
+    /// define the argument with default value for command, used for no-variadic argument
     Self argument(T)(string name, string desc, T val) if (isBaseArgValueType!T) {
         auto arg = createArgument!T(name, desc);
         arg.defaultVal(val);
@@ -2018,6 +2162,7 @@ public:
         return this;
     }
 
+    /// define the argument with default value for command, used for variadic argument
     Self argument(T)(string name, string desc, T val, T[] rest...)
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto arg = createArgument!T(name, desc);
@@ -2026,6 +2171,7 @@ public:
         return this;
     }
 
+    /// define the argument with default value for command, used for variadic argument
     Self argument(T : U[], U)(string name, string desc, T defaultVal)
             if (!is(U == bool) && isBaseArgValueType!U) {
         assert(defaultVal.length >= 1);
@@ -2035,6 +2181,7 @@ public:
         return this;
     }
 
+    /// define manly arguments for command
     Self arguments(Args...)(string names) {
         enum args_num = Args.length;
         auto arg_strs = names.strip().split(" ");
@@ -2045,30 +2192,36 @@ public:
         return this;
     }
 
+    /// configure the output of command
     Self configureOutput(OutputConfiguration config) {
         this._outputConfiguration = config;
         return this;
     }
 
+    /// get the output cofiguration of command
     inout(OutputConfiguration) configureOutput() inout {
         return this._outputConfiguration;
     }
 
+    /// whether show help info when parsing occur error, default: `true`
     Self showHelpAfterError(bool displayHelp = true) {
         this._showHelpAfterError = displayHelp;
         return this;
     }
 
+    /// whether show suggestion info when parsing occur error, default: `true`
     Self showSuggestionAfterError(bool displaySuggestion = true) {
         this._showSuggestionAfterError = displaySuggestion;
         return this;
     }
 
+    /// whether allow combine flag mode like `ls -al`, default: `true`
     Self comineFlagAndOptionValue(bool combine) {
         this._combineFlagAndOptionalValue = combine;
         return this;
     }
 
+    /// whether allow excess argument, default: `true`
     Self allowExcessArguments(bool allow) {
         this._allowExcessArguments = allow;
         return this;
@@ -2104,6 +2257,7 @@ package:
     }
 
 public:
+    /// get the usage of command
     string usage() const {
         if (this._usage == "") {
             string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
@@ -2118,6 +2272,10 @@ public:
         return this._usage;
     }
 
+    /// set the usage of command
+    /// Params:
+    ///   str = the usage string. if `str` is `""`, then will automatically generate the usage for command
+    /// Returns: `Self` for chain call
     Self usage(string str) {
         Command command = this;
         if (this._commands.length != 0 && this._commands[$ - 1]._execHandler) {
@@ -2138,9 +2296,13 @@ public:
         return this;
     }
 
+    /// get sub command by name
     alias findCommand = _findCommand;
+    /// get option by name, short flag and long flag
     alias findOption = _findOption;
+    /// get negate option by name, short flag and long flag
     alias findNOption = _findNegateOption;
+    /// get argument by name
     alias findArgument = _findArgument;
 }
 
@@ -2177,10 +2339,13 @@ unittest {
 //     writeln(arg4.name);
 // }
 
+/// create a command by name
 Command createCommand(string name) {
     return new Command(name);
 }
 
+/// create a command by the flag that contains its name and arguments with description
+/// see `Command.command(Args...)(string nameAndArgs, string desc = "")`
 Command createCommand(Args...)(string nameAndArgs, string desc = "") {
     auto caputures = matchFirst(nameAndArgs, PTN_CMDNAMEANDARGS);
     string name = caputures[1], _args = caputures[2];
@@ -2192,6 +2357,7 @@ Command createCommand(Args...)(string nameAndArgs, string desc = "") {
     return cmd;
 }
 
+/// the output type used in command
 class OutputConfiguration {
     void function(string str) writeOut = (string str) => stdout.write(str);
     void function(string str) writeErr = (string str) => stderr.write(str);
@@ -2218,9 +2384,11 @@ else version (Posix) {
     }
 }
 
+/// the wrap of option value map
 struct OptsWrap {
     private OptionVariant[string] innerValue;
 
+    /// enable getting option value wrapped by `ArgWrap` by name using call form
     ArgWrap opCall(string member) const {
         auto ptr = member in innerValue;
         if (ptr) {
@@ -2235,6 +2403,7 @@ struct OptsWrap {
     }
 }
 
+/// the wrap of option and argument value
 struct ArgWrap {
     private ArgNullable innerValue;
 
@@ -2246,13 +2415,16 @@ struct ArgWrap {
         this.innerValue = n;
     }
 
+    /// test wheter the inner value is valid
     @property
     bool isValid() inout {
         return !innerValue.isNull;
     }
 
+    /// enable implicitly convert to `bool` type representing `this.isValid`
     alias isValid this;
 
+    /// get the innner type, remember use it after test whether it is valid
     T get(T)() const if (isArgValueType!T) {
         bool is_type = testType!T(this.innerValue);
         if (!is_type) {
@@ -2261,15 +2433,18 @@ struct ArgWrap {
         return cast(T) this.innerValue.get!T;
     }
 
+    /// test whether the type is the innner vlalue type
     bool verifyType(T)() const {
         return testType!T(this.innerValue);
     }
 
+    /// enable the assign oparator with innner type that allow by `ArgWrap`
     auto opAssign(T)(T value) if (isArgValueType!T || is(T == typeof(null))) {
         this.innerValue = value;
         return this;
     }
 
+    /// enbale the explicity cast that can get the inner value
     T opCast(T)() const if (isArgValueType!T) {
         return this.get!T;
     }

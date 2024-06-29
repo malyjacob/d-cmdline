@@ -25,16 +25,16 @@ import mir.algebraic;
 import cmdline.error;
 import cmdline.pattern;
 
-/// the result type after parsing the flags.
+// the result type after parsing the flags.
 package struct OptionFlags {
-    /// short flag
-    ///Examples: `-f`, `-s`, `-x`
+    // short flag
+    // Examples: `-f`, `-s`, `-x`
     string shortFlag = "";
-    /// long flag
-    ///Examples: `--flag`, `--mixin-flag`, `--no-flag`
+    // long flag
+    // Examples: `--flag`, `--mixin-flag`, `--no-flag`
     string longFlag = "";
-    /// value flag
-    ///Examples: `<required>`, `[optional]`, `<variadic...>`
+    // value flag
+    // Examples: `<required>`, `[optional]`, `<variadic...>`
     string valueFlag = "";
 }
 
@@ -114,14 +114,15 @@ unittest {
     assert(!test_bool(on));
 }
 
-/// Option Type
+/** 
+the option type.
+store the value that command line's options input.
+we can get the inner value after it is initialized.
+ */
 class Option {
 package:
-    /// inner property, description for option 
     string _description;
-    /// inner property, description for default value
     string defaultValueDescription;
-    /// inner property, 
     bool mandatory;
 
     string flags;
@@ -186,36 +187,52 @@ package:
     }
 
 public:
+    /// get the description, and the output starts with `description: `
     string description() const {
         return "description: " ~ this._description;
     }
 
+    /// set the description
     Self description(string desc) {
         this._description = desc;
         return this;
     }
 
+    /// test whether the other `Option` variable's flag same in some parts
     bool matchFlag(in Option other) const {
         return this.longFlag == other.longFlag ||
             (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
     }
 
+    /// test whether the other `NegateOption` variable's flag same in some parts
     bool matchFlag(in NegateOption other) const {
         auto short_flag = this.shortFlag;
         auto nshort_flag = other.shortFlag;
         return short_flag.empty ? false : short_flag == nshort_flag;
     }
 
+    /// specify the name of the option that conflicts with this option
+    /// Params:
+    ///   name = the name of the option that conflicts with this option
+    /// Returns: `Self` for chain call
     Self conflicts(string name) {
         this.conflictsWith ~= name;
         return this;
     }
 
+    /// specify the name of the options that conflicts with this option
+    /// Params:
+    ///   names = the names of the option that conflicts with this option
+    /// Returns: `Self` for chain call
     Self conflicts(const string[] names) {
         this.conflictsWith ~= names;
         return this;
     }
 
+    /// imply the value of other options' value of `true`
+    /// Params:
+    ///   names = the options' names
+    /// Returns: `Self` for chain call
     Self implies(string[] names) {
         if (!names.length) {
             error("the length of implies key cannot be zero");
@@ -236,6 +253,11 @@ public:
         return this;
     }
 
+    /// imply the value of other option's value of `T`, `T` must satisfy `isOptionValueType`
+    /// Params:
+    ///   key = the name of option
+    ///   value = the value imply for
+    /// Returns: `Self` for chain call
     Self implies(T)(string key, T value) if (isOptionValueType!T) {
         bool signal = false;
         foreach (k; implyMap.byKey) {
@@ -250,31 +272,47 @@ public:
         return this;
     }
 
+    /// set the env variable's key so that the option can set its value from `env`
+    /// Params:
+    ///   name = the env variable's key
+    /// Returns: `Self` for chain call
     Self env(string name) {
         this.envKey = name;
         return this;
     }
 
+    /// set whether the option is mandatory
+    /// Params:
+    ///   mandatory = whether the option is mandatory
+    /// Returns: `Self` for chain call
     Self makeMandatory(bool mandatory = true) {
         this.mandatory = mandatory;
         return this;
     }
 
+    /// set whether the option is hidden out of help command
+    /// Params:
+    ///   hide = whether the option is hidden out of help command
+    /// Returns: `Self` for chain call
     Self hideHelp(bool hide = true) {
         this.hidden = hide;
         return this;
     }
 
+    /// get the name
     @property
     string name() const {
         return this.longFlag[2 .. $].idup;
     }
 
+    /// get the attribute name with camel-like
     @property
     string attrName() const {
         return _camelCase(this.name);
     }
 
+    /// get the raw env variable in `string` type acccording to `this.envKey`
+    /// which is set by `this.env`
     package
     @property
     string envStr() const {
@@ -282,64 +320,97 @@ public:
         return raw;
     }
 
+    /// test whether a string is this option's long or short flag 
     bool isFlag(string flag) const {
         return !flag.empty && (this.shortFlag == flag || this.longFlag == flag);
     }
 
+    /// test whether is a bool option
     @property
     bool isBoolean() const {
         return this.valueName.length == 0;
     }
 
+    /// test whether is optional option
     @property
     bool isOptional() const {
         return (!this.required && this.optional);
     }
 
+    /// Test is required option
     @property
     bool isRequired() const {
         return (!this.optional && this.required);
     }
 
-    // for being inhelited
+    /// set the default value as `true`
+    /// Returns: `Self` for chain call
     Self defaultVal() {
         // throw new OptionMemberFnCallError;
         return this;
     }
 
+    /// set the config value as `true`, which is used for
+    /// inernal impletation and is not recommended for use in you project
+    /// Returns: `Self` for chain call
     Self configVal() {
         // throw new OptionMemberFnCallError;
         return this;
     }
 
+    /// set the imply value as `true`, which is used for
+    /// inernal impletation and is not recommended for use in you project
+    /// Returns: `Self` for chain call
     Self implyVal() {
         // throw new OptionMemberFnCallError;
         this.innerImplyData = true;
         return this;
     }
 
+    /// set the option value from `env`
     Self envVal() {
         // throw new OptionMemberFnCallError;
         return this;
     }
 
+    /// set the preset value as `true`
     Self preset() {
         // throw new OptionMemberFnCallError;
         return this;
     }
 
+    /// set the value from client shell
+    /// Params:
+    ///   value = the first input value, and this func will call inner parsing callback to transform `string` type
+    ///           to the target type that `Self` required
+    ///   rest = the rest of input value
+    /// Returns: `Self`` for chain call
     Self cliVal(string value, string[] rest...) {
         // throw new OptionMemberFnCallError;
         return this;
     }
 
+    /// test whether the argument is valid so that you can safely get the inner value
+    /// after the return value is `true`
     @property
     abstract bool isValid() const;
+
+    /// get the innner value and is recommended to be used after calling `this.initialize()`
+    /// Returns: the variant of final value
     @property
     abstract OptionVariant get() const;
+
+    /// initialize the final value. if `this.isValid` is `false`, then would throw error
+    /// Returns: `Self`` for chain call
     abstract Self initialize();
+
+    /// set the imply value, which is used for
+    /// inernal impletation and is not recommended for use in you project
+    /// Returns: `Self` for chain call
     abstract Self implyVal(OptionVariant value);
 
+    /// set the choices of argument inner type
+    ///Params: values = the sequence of choices value
     Self choices(T)(T[] values) {
         auto is_variadic = this.variadic;
         if (is_variadic) {
@@ -352,11 +423,24 @@ public:
         }
     }
 
+    /// set the choices of argument inner type
+    /** 
+     * 
+     * Params:
+     *   value = a choice value 
+     *   rest = the rest choice values
+     * Returns: `Self` for chain call
+     */
     Self choices(T)(T value, T[] rest...) {
         auto tmp = rest ~ value;
         return choices(tmp);
     }
 
+    /// set the range of option inner value when the option innner value type is `int` or `double`
+    /// Params:
+    ///   min = the minimum
+    ///   max = the maximum
+    /// Returns: `Self` for chain call
     Self rangeOf(T)(T min, T max) if (is(T == int) || is(T == double)) {
         auto is_variadic = this.variadic;
         if (is_variadic) {
@@ -369,6 +453,10 @@ public:
         }
     }
 
+    /// set the default value
+    /// Params:
+    ///   value = the value to be set as default value, `T` must satisfy `isBaseOptionValueType`
+    /// Returns: `Self`` for chain call
     Self defaultVal(T)(T value) if (isBaseOptionValueType!T) {
         static if (is(T == bool)) {
             auto derived = cast(BoolOption) this;
@@ -383,6 +471,11 @@ public:
         return derived.defaultVal(value);
     }
 
+    /// set the default value
+    /// Params:
+    ///   value = the first value to be set as default value, usually as the first element of default array value 
+    ///   rest = the rest values to be set as default value, `T` must satisfy `isBaseOptionValueType` and not `bool`
+    /// Returns: `Self`` for chain call
     Self defaultVal(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
@@ -393,6 +486,11 @@ public:
         return derived.defaultVal(value, rest);
     }
 
+    /// set the default value
+    /// Params:
+    ///   values = the value to be set as default value, usually as the default array value,
+    ///            `T` must satisfy `isBaseOptionValueType` and not `bool`
+    /// Returns: `Self`` for chain call
     Self defaultVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
             error("the values length cannot be zero");
@@ -478,6 +576,11 @@ package:
     //     return implyVal(values[0], cast(T[]) values[1 .. $]);
     // }
 public:
+
+    /// preset the value used for value option
+    /// Params:
+    ///   value = the value to be preset
+    /// Returns: `Self` for chain call
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
         if (!derived) {
@@ -487,6 +590,11 @@ public:
         return derived.preset(value);
     }
 
+    /// preset the value used for variadic option
+    /// Params:
+    ///   value = the first value to be preset as an element of array inner value
+    ///   rest = the rest value to be preset
+    /// Returns: `Self` for chain call
     Self preset(T)(T value, T[] rest...)
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
@@ -497,6 +605,10 @@ public:
         return derived.preset(value, rest);
     }
 
+    /// preset the value used for variadic option
+    /// Params:
+    ///   values = the first value to be preset
+    /// Returns: `Self` for chain call
     Self preset(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
             error("the values length cannot be zero");
@@ -504,10 +616,15 @@ public:
         return preset(values[0], cast(T[]) values[1 .. $]);
     }
 
+    /// get inner value in the specified type, `T` usually is among `OptionValueSeq`
+    /// Returns: the result value
     T get(T)() const {
         return this.get.get!T;
     }
 
+    /// set the parsing function using for transforming from `string` to `T`
+    /// alias fn = `T fn(string v)`, where `T` is the inner value type 
+    /// Returns: `Self` for chain call
     Self parser(alias fn)() {
         alias T = typeof({ string v; return fn(v); }());
         static assert(isBaseOptionValueType!T && !is(T == bool));
@@ -525,6 +642,9 @@ public:
         return result_this;
     }
 
+    /// set the process function for processing the value parsed by innner parsing function
+    /// alias fn = `T fn(T v)`, where `T` is the inner value type
+    /// Returns: `Self` for chain call
     Self processor(alias fn)() {
         alias return_t = ReturnType!fn;
         alias param_t = Parameters!fn;
@@ -545,6 +665,10 @@ public:
         return result_this;
     }
 
+    /// set the reduce process function for reducely processing the value parsed by innner parsing function or process function
+    /// mainly used in variadic option
+    /// alias fn = `T fn(T v, T t)`, where `T` is the inner value type
+    /// Returns: `Self` for chain call
     Self processReducer(alias fn)() {
         alias return_t = ReturnType!fn;
         alias param_t = Parameters!fn;
@@ -556,24 +680,30 @@ public:
         return derived;
     }
 
+    /// get the type in `string` type, used for help command and help option
+    /// start with `type: `
     string typeStr() const {
         return "";
     }
 
+    /// get the default value in `string` type, start with `default: `
     string defaultValStr() const {
         return "";
     }
 
+    /// get the preset value in `string` type, start with `preset: `
     string presetStr() const {
         return "";
     }
 
+    /// get the env variable's key
     string envValStr() const {
         if (this.envKey == "")
             return this.envKey;
         return "env: " ~ this.envKey;
     }
 
+    /// get the imply map in`string` type, start with `imply `
     string implyOptStr() const {
         if (!implyMap)
             return "";
@@ -615,6 +745,7 @@ public:
         return str;
     }
 
+    /// get the list of confilt option in `string` type, start with `conflict with `
     string conflictOptStr() const {
         if (this.conflictsWith.empty)
             return "";
@@ -623,19 +754,27 @@ public:
         return str ~ "]";
     }
 
+    /// get the choices in `string` type, start with `choices: `
     string choicesStr() const {
         return "";
     }
 
+    /// get the range in `string` type, start with `range: `
     string rangeOfStr() const {
         return "";
     }
 }
 
+/// create `bool` option
+/// Params:
+///   flags = the flag like `-f, --flag`, `--flag`, must include long flag
+///   desc = the description of option
+/// Returns: a `bool` option
 Option createOption(string flags, string desc = "") {
     return createOption!bool(flags, desc);
 }
 
+/// create `bool` option
 Option createOption(T : bool)(string flags, string desc = "") {
     auto opt = splitOptionFlags(flags);
     bool is_bool = opt.valueFlag == "";
@@ -645,6 +784,12 @@ Option createOption(T : bool)(string flags, string desc = "") {
     return new BoolOption(flags, desc);
 }
 
+/// create value/variadic option, whose inner type or inner value's element type
+/// `T` must satisfy `isBaseOptionValueType` and not `bool`
+/// Params:
+///   flags = the flag like `-f, --flag <name>`, `--flag [name...]`
+///   desc = the description of option
+/// Returns: a value/variadic option
 Option createOption(T)(string flags, string desc = "")
         if (!is(T == bool) && isBaseOptionValueType!T) {
     auto opt = splitOptionFlags(flags);
@@ -661,6 +806,11 @@ Option createOption(T)(string flags, string desc = "")
     }
 }
 
+/// create varidic option, whose inner values's element type `T` must satisfy `isBaseOptionValueType` and not `bool`
+/// Params:
+///   flags = the flag like `-f, --flag [name...]`, `--flag <name...>`
+///   desc = the description of option
+/// Returns: a variadic option
 Option createOption(T : U[], U)(string flags, string desc = "")
         if (!is(U == bool) && isBaseOptionValueType!U) {
     return createOption!U(flags, desc);
@@ -958,10 +1108,10 @@ package class ValueOption(T) : Option {
             }
             catch (ConvException e) {
                 error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
-                    this.name,
-                    values.to!string,
-                    T.stringof
-            ));
+                        this.name,
+                        values.to!string,
+                        T.stringof
+                ));
             }
             return this;
         }
@@ -1339,10 +1489,10 @@ package class VariadicOption(T) : Option {
             }
             catch (ConvException e) {
                 error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
-                    this.name,
-                    values.to!string,
-                    T.stringof
-            ));
+                        this.name,
+                        values.to!string,
+                        T.stringof
+                ));
             }
             return this;
         }
@@ -1619,6 +1769,10 @@ unittest {
     assert(vopt.get!int == 28);
 }
 
+
+/++ 
+the negate option like `--no-flag`, which is controller option that doesn't contains inner value.
++/
 class NegateOption {
 package:
     string shortFlag;
@@ -1641,32 +1795,42 @@ package:
     }
 
 public:
+    /// test whether the other `NegateOption` variable's flag same in some parts
     bool matchFlag(in NegateOption other) const {
         return this.longFlag == other.longFlag ||
             (this.shortFlag.empty ? false : this.shortFlag == other.shortFlag);
     }
 
+    /// test whether the other `Option` variable's flag same in some parts
     bool matchFlag(in Option other) const {
         auto nshort_flag = this.shortFlag;
         auto short_flag = other.shortFlag;
         return short_flag.empty ? false : short_flag == nshort_flag;
     }
 
+    /// get the name of option
     @property
     string name() const {
         return this.longFlag[5 .. $].idup;
     }
 
+    /// get the attribute name of option in camel-like, which is gennerated from `this.name`
     @property
     string attrName() const {
         return _camelCase(this.name);
     }
 
+    /// test whether a string matches this option's long/short flag
     bool isFlag(string flag) const {
         return !flag.empty && (this.shortFlag == flag || this.longFlag == flag);
     }
 }
 
+/// creae a negate option
+/// Params:
+///   flags = the flag like `-F, --no-flag`
+///   desc = the description of option
+/// Returns: a negate option
 NegateOption createNegateOption(string flags, string desc = "") {
     return new NegateOption(flags, desc);
 }

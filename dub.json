@@ -19,5 +19,10 @@
 	"sourcePaths": [
 		"source"
 	],
-	"dflags": ["-preview=in"]
+	"dflags": ["-preview=in"],
+	"buildTypes": {
+		"doc": {
+			"dflags": ["-Dddoc"]
+		}
+	}
 }

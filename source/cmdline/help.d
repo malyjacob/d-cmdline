@@ -1,3 +1,12 @@
+/++
+$(H2 The Help Type for Cmdline)
+
+This modlue mainly has `Help` Type.
+We can change it to control the behaviors 
+of the cmd-line program's help command and help option
+
+Authors: 笑愚(xiaoyu)
++/
 module cmdline.help;
 
 import std.algorithm;
@@ -13,15 +22,18 @@ import cmdline.pattern;
 import cmdline.option;
 import cmdline.argument;
 import cmdline.command;
-import core.stdcpp.array;
 
 class Help {
+    /// the help print's max coloum width
     int helpWidth = 80;
-
+    /// whether sort the sub commands on help print
     bool sortSubCommands = false;
+    /// whether sort the options on help print
     bool sortOptions = false;
+    /// whether show global options, which is not recommended to turn on it
     bool showGlobalOptions = false;
 
+    /// get the list of not hidden sub commands
     inout(Command)[] visibleCommands(inout(Command) cmd) const {
         Command cmd_tmp = cast(Command) cmd;
         Command[] visible_cmds = cmd_tmp._commands.filter!(c => !c._hidden).array;
@@ -39,6 +51,7 @@ class Help {
         return cast(inout(Command[])) visible_cmds;
     }
 
+    /// get the list of not hidden options
     inout(Option)[] visibleOptions(inout(Command) command) const {
         auto cmd = cast(Command) command;
         Option[] visible_opts = (cmd._options).filter!(opt => !opt.hidden).array;
@@ -58,6 +71,7 @@ class Help {
         return cast(inout(Option[])) visible_opts;
     }
 
+    /// get the list of not hidden negate options
     inout(NegateOption)[] visibleNegateOptions(inout(Command) command) const {
         auto cmd = cast(Command) command;
         auto visible_opts = (cmd._negates).filter!(opt => !opt.hidden).array;
@@ -67,6 +81,7 @@ class Help {
         return cast(inout(NegateOption[])) visible_opts;
     }
 
+    /// get the list of not hidden global options
     inout(Option)[] visibleGlobalOptions(inout(Command) command) const {
         if (!this.showGlobalOptions)
             return [];
@@ -83,6 +98,7 @@ class Help {
         return cast(inout(Option[])) visible_opts;
     }
 
+    /// get the list of not hidden global negate options 
     inout(NegateOption)[] visibleGlobalNegateOptions(inout(Command) command) const {
         if (!this.showGlobalOptions)
             return [];
@@ -97,6 +113,7 @@ class Help {
         return cast(inout(NegateOption[])) visible_opts;
     }
 
+    /// get the list of arguments
     inout(Argument)[] visibleArguments(inout(Command) command) const {
         if (command._argsDescription) {
             Command cmd = cast(Command) command;
@@ -111,6 +128,7 @@ class Help {
         return command._arguments;
     }
 
+package:
     string subCommandTerm(in Command cmd) const {
         auto args_str = "";
         if (cmd._arguments.length)
@@ -172,7 +190,8 @@ class Help {
         })(0, visibleArguments(cast(Command) cmd));
     }
 
-    string commandUsage(in Command cmd) const {
+    /// get the usage of command
+    public string commandUsage(in Command cmd) const {
         string cmd_name = cmd._name;
         if (!cmd._aliasNames.empty)
             cmd_name = cmd_name ~ "|" ~ cmd._aliasNames[0];
@@ -379,7 +398,7 @@ int _editDistance(string a, string b) {
     return dp[a.length][b.length];
 }
 
-public:
+package:
 
 string suggestSimilar(string word, in string[] _candidates) {
     if (!_candidates || _candidates.length == 0)
@@ -439,83 +458,3 @@ unittest {
     assert(_editDistance("meow", "woof") == 3);
     assert(_editDistance("woof", "meow") == 3);
 }
-
-// unittest {
-
-//     Command program = createCommand("program");
-//     program.allowExcessArguments(false);
-//     program.setVersion("0.0.1");
-
-//     Option opt = createOption!string("-g, --greeting <str>");
-//     program.addActionOption(opt, (string[] vals...) {
-//         writeln("GREETING:\t", vals[0]);
-//     });
-//     program.option("-f, --first <num>", "test", 13);
-//     program.option("-s, --second <num>", "test", 12);
-//     program.argument("[multi]", "乘数", 4);
-//     program.action((args, optMap) {
-//         auto fnum = optMap["first"].get!int;
-//         auto snum = optMap["second"].get!int;
-//         int multi = 1;
-//         if (args.length)
-//             multi = args[0].get!int;
-//         writeln(format("%4d * (%4d + %4d) = %4d", multi, fnum, snum, (fnum + snum) * multi));
-//     });
-
-//     program
-//         .command("list")
-//         .aliasName("ls")
-//         .argument("[dir-path]", "dir path", ".")
-//         .option("-a, --all", "do not ignore entries starting with .")
-//         .option("-l, --long", "use a long listing format")
-//         .option("-s, --size", "print the allocated size of each file, in blocks", true)
-//         .action((args, opts) {
-//             auto dir = args[0].get!string;
-//             string l, a, s;
-//             if ("all" in opts)
-//                 a = opts["all"].get!bool ? "-a" : a;
-//             if ("long" in opts)
-//                 l = opts["long"].get!bool ? "-l" : l;
-//             if ("size" in opts)
-//                 s = opts["size"].get!bool ? "-s" : s;
-//             auto flags = (["ls"] ~ [l, a, s, dir]).filter!(str => str.length).array.join(" ");
-//             writeln("RUNNING:\t", flags);
-//             auto result = executeShell(flags);
-//             writeln(result[1]);
-//         });
-
-//     program
-//         .command!(string, string)("greet <name> [greetings...]")
-//         .aliasName("grt")
-//         .action((args, opts) {
-//             string name = args[0].get!string;
-//             string[] greetings;
-//             if (args.length > 1) {
-//                 greetings = args[1].get!(string[]);
-//             }
-//             writeln(format("hello %s, %s", name, greetings.join(", ")));
-//         });
-
-//     Option header_opt = createOption!string("-H, --header <header-str>");
-//     header_opt.env("HEADER");
-
-//     program
-//         .command("calculate")
-//         .aliasName("cal")
-//         .argument("tag", "tag", "Tag")
-//         .option!int("-m, --multi <value>", "multi value")
-//         .option!int("-n, --nums <numbers...>", "numbers value")
-//         .addOption(header_opt)
-//         .action((args, opts) {
-//             int multi = opts["multi"].get!int;
-//             int[] nums = opts["nums"].get!(int[]);
-//             string tag = args[0].get!string;
-//             string header = opts["header"].get!string;
-//             int result = reduce!((a, b) => a + b)(0, nums) * multi;
-//             string nums_str = nums.map!(n => n.to!string).join(" + ");
-//             writefln("HEADER:\t%8s", header);
-//             writeln(format("%8s: %d * (%s) = %d", tag, multi, nums_str, result));
-//         });
-
-//     Help help = new Help;
-// }

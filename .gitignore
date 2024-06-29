@@ -22,3 +22,5 @@ bin/*
 /examples/bin/*
 !/examples/bin/*.config.json
 
+/doc
+
