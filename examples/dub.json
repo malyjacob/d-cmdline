@@ -22,7 +22,7 @@
                 "\"$DUB\" build -c calc",
                 "\"$DUB\" build -c cheese",
                 "\"$DUB\" build -c defcmd",
-                "\"$DUB\" build -c jead"
+                "\"$DUB\" build -c jread"
             ]
         },
         {
@@ -34,7 +34,7 @@
                 "\"$DUB\" build -c calc -b release",
                 "\"$DUB\" build -c cheese -b release",
                 "\"$DUB\" build -c defcmd -b release",
-                "\"$DUB\" build -c jead -b release"
+                "\"$DUB\" build -c jread -b release"
             ]
         },
         {
