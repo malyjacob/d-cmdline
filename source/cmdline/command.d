@@ -2248,15 +2248,23 @@ package:
         exit(exitCode);
     }
 
-    private void parsingError(string msg = "", string code = "command.error") const {
+public:
+    /// invoke error when parsing command line
+    /// Params:
+    ///   msg = the error message
+    ///   code = the code to tag the error
+    void parsingError(string msg = "", string code = "command.error") const {
         this._exitErr(msg, code);
     }
 
-    private void error(string msg = "", string code = "command.error") const {
+    /// invoke error when configuring command
+    /// Params:
+    ///   msg = the error message
+    ///   code = the code to tag the error
+    void error(string msg = "", string code = "command.error") const {
         throw new CMDLineError(msg, 1, code);
     }
 
-public:
     /// get the usage of command
     string usage() const {
         if (this._usage == "") {
