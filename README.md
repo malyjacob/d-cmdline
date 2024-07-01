@@ -12,9 +12,13 @@
 
 ## Quick Start
 
+Firstly, before use this library, we should install it using dub.
 
+```
+dub add cmdline
+```
 
-We just  `import cmdline`  so that can use all the features that the library exposes to developers.
+And  then we just  `import cmdline`  so that can use all the features that the library exposes to developers.
 
 
 
