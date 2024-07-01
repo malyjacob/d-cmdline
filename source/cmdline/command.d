@@ -523,10 +523,12 @@ public:
         }
         else {
             _registerOption(option);
-            if (opt.isBoolean)
+            if (opt.isBoolean) {
+                opt.defaultVal();
                 this.on("negate:" ~ option.name, () {
                     setOptionValDirectly(option.name, false, Source.Cli);
                 });
+            }
             else
                 this.on("negate:" ~ option.name, () {
                     this._options = this._options.remove!(ele => ele is opt);
