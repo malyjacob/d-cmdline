@@ -22,7 +22,9 @@
                 "\"$DUB\" build -c calc",
                 "\"$DUB\" build -c cheese",
                 "\"$DUB\" build -c defcmd",
-                "\"$DUB\" build -c jread"
+                "\"$DUB\" build -c jread",
+                "\"$DUB\" build -c greet",
+                "\"$DUB\" build -c variadic"
             ]
         },
         {
@@ -34,7 +36,9 @@
                 "\"$DUB\" build -c calc -b release",
                 "\"$DUB\" build -c cheese -b release",
                 "\"$DUB\" build -c defcmd -b release",
-                "\"$DUB\" build -c jread -b release"
+                "\"$DUB\" build -c jread -b release",
+                "\"$DUB\" build -c greet -b release",
+                "\"$DUB\" build -c variadic -b release"
             ]
         },
         {
@@ -66,6 +70,16 @@
             "name": "jread",
             "targetName": "jread",
             "mainSourceFile": "./jread.d"
+        },
+        {
+            "name": "greet",
+            "targetName": "greet",
+            "mainSourceFile": "./greet.d"
+        },
+        {
+            "name": "variadic",
+            "targetName": "variadic",
+            "mainSourceFile": "./variadic.d"
         }
     ]
 }

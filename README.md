@@ -100,6 +100,8 @@ We can use build-in trait function `isOptionValueType` to determine whether a ty
     static assert(!isBaseOptionValueType!(int[]));
 ```
 
+Necessary to remember that the options's flag pattern must include its long flag, while the short flag is optional.
+
 Here are two main way to create options and apply it to command line application.
 
 1. using member functions like `Command.option` and `Command.requireOption`
@@ -132,15 +134,9 @@ In this example,  `--global` is bool options. Bool arguments that usually defaul
 
 When bool flag specified then the value is `true`, otherwise the value is undefined and cannot be gotten.
 
-
-
 Only its related negate option is specified, then the bool option's value is `false`.
 
-
-
  And when related bool option ihas been configured but  not specifled, then the bool option's value is `true` by default. 
-
-
 
 The following is an example of bool options using  `d-cmdline`
 
@@ -165,18 +161,147 @@ void main(in string[] argv) {
 }
 ```
 
-```d
-$ cheese // Add sauce
-$ cheese --sauce // same as above
-$ cheese --no-sauce // Remove sauce
+```bash
+$ cheese # Add sauce
+$ cheese --sauce # same as above
+$ cheese --no-sauce # Remove sauce
 ```
-
-
 
 ### value options
 
 On the command line,  the value options are always used to pass value to the program and its value stored in key-value structure, key is its name and value is its inner  value.
 
-
-
 The flags of value options on command line are like `--flag value` , `-f value`, `--flag=value`, `-fvalue`.
+
+
+
+In `d-cmdline` value options' inner sotred value type is among `int`, `double` and `string`.
+
+
+
+Value options have two type, that is rquired value options and optional required value options. The required value options' flag pattern is like `--flag <value-name>`, while the optional value options' flag pattern is like `--flag [value-name]`.
+
+
+
+For required value options, the inner value of the option must be valid if the flag of the options are found in command line, while the optional value options' ones need not.
+
+
+
+And if the optional value option's flag is found while no value be found after it, then the optional value option's inner value would be `true`, instead of the registered type.
+
+
+
+Let's see what the required/optional value options are like:
+
+```d
+module examples.greet;
+
+import std.stdio;
+import cmdline : program, OptsWrap, ArgWrap;
+
+void main(in string[] argv) {
+    program
+        .name("greet")
+        .description("a simple greeting program")
+        .option!string("-p, --person [name]", "the persion you greet to")
+        .option!string("-g, --greeting <str>", "the greeting string");
+
+    program.parse(argv);
+
+    OptsWrap opts = program.getOpts();
+    ArgWrap raw_person = opts("person");
+    bool person_is_bool = raw_person.verifyType!bool;
+    string person = raw_person.isValid ?
+        person_is_bool ? "guy" : raw_person.get!string : "";
+    string greeting = opts("greeting").get!string;
+    writefln("Hello %s, %s", person, greeting);
+}
+```
+
+```bash
+$ greet -g "how are you?" # Hello , how are you?
+$ greet -g "how are you?" -p # Hello guy, how are you?
+$ greet -g "how are you?" -pjack # Hello jack, how are you?
+```
+
+### variadic options
+
+On the command line, the variadic options are always used to pass values to the program and its values stored in key-value structure, key is its name and value is stored as an array of the values you pass on command line.
+
+
+
+The flags of variadic options on command line are like `--flag value1 value2` , `-f value1 value2`, `--flag=value1 --flag=value2`, `-fvalue1 -fvalue2`.
+
+
+
+In `d-cmdline` variadic options' inner sotred value type is among `int[]`, `double[]` and `string[]`.
+
+
+
+Variadic options have two type, that is rquired variadic options and optional required variadic options. The required variadic options' flag pattern is like `--flag <value-name...>`, while the optional variadic options' flag pattern is like `--flag [value-name...]`.
+
+
+
+For required variadic options, the inner value of the option must be valid and its length must not be zero if the flag of the options are found in command line, while the optional value options' ones need not.
+
+
+
+And if the optional variadic option's flag is found while no value be found after it, then the optional value option's inner value would be `true`, instead of the registered type.
+
+
+
+Let's see what the required/optional variadic options are like:
+
+```d
+module examples.variadic;
+
+import std.stdio;
+import std.conv;
+import cmdline : program, OptsWrap;
+
+
+void main(in string[] argv) {
+    program
+        .name("variadic")
+        .description("test the variadic option")
+        .option!int("-r, --required <values...>", "")
+        .option!(int[])("-o, --optional [values...]", "");
+    
+    program.parse(argv);
+    
+    OptsWrap opts = program.getOpts();
+    auto raw_required = opts("required");
+    auto raw_optional = opts("optional");
+
+    string required = raw_required.isValid ?
+            raw_required.get!(int[]).to!string : "no required";
+
+    string optional = raw_optional.isValid ?
+            raw_optional.verifyType!bool ? true.to!string
+            : raw_optional.get!(int[]).to!string : "no optional";
+
+    writefln("required: %s", required);
+    writefln("optional: %s", optional);
+}
+```
+
+```bash
+$ variadic -r 12 13 -r14 -r15
+# required: [12, 13, 14, 15]
+# optional: no optional
+
+$ variadic -r 12 13 -r14 -r15 -o
+# required: [12, 13, 14, 15]
+# optional: true
+
+$ variadic -r 12 13 -r14 -r15 -o 34
+# required: [12, 13, 14, 15]
+# optional: [34]
+
+$ variadic -r 12 13 -r14 -r15 -o34
+# same as above
+
+$ variadic -o 12 13 -o14 -o15
+# required: no required
+# optional: [12, 13, 14, 15]
+```
