@@ -112,7 +112,7 @@ package:
     public OptionVariant[string] opts = null;
 
     bool _allowExcessArguments = true;
-    bool _showHelpAfterError = true;
+    bool _showHelpAfterError = false;
     bool _showSuggestionAfterError = true;
     bool _combineFlagAndOptionalValue = true;
 
@@ -751,7 +751,7 @@ package:
             this.parsingError(format!"option `%s` doesn't exist"(key));
         }
         BoolOption derived = cast(BoolOption) opt;
-        derived.innerData = value;
+        derived.innerBoolData = value;
         derived.source = src;
         derived.settled = true;
         return this;
@@ -1249,7 +1249,9 @@ package:
         Argument prev = null;
         foreach (i, arg; this._arguments) {
             if (prev && arg.settled && !prev.settled)
-                this.parsingError("arg should be valid in row");
+                this.parsingError(format!"arg should be valid in row, the prev arg `%s` is invalid, while cur arg `%s` is valid"(
+                    prev._name, arg._name
+                ));
             prev = arg;
         }
         this.args = this._arguments
@@ -1742,6 +1744,24 @@ public:
         return null;
     }
 
+    package void _helpCommandAction(in OptsWrap _, in ArgWrap hcommand) {
+        if (hcommand.isValid) {
+            auto sub_cmd_name = hcommand.get!string;
+            auto sub_cmd = this._findCommand(sub_cmd_name);
+            auto vcmd = this._versionCommand;
+            sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
+            if (!sub_cmd || sub_cmd._hidden)
+                this.parsingError("can not find the sub command `" ~ sub_cmd_name ~ "`!");
+            if (sub_cmd._execHandler) {
+                sub_cmd.execSubCommand([
+                    this._externalCmdHelpFlagMap[sub_cmd._name]
+                ]);
+            }
+            sub_cmd.help();
+        }
+        this.help();
+    }
+
     /// set the help command
     Self setHelpCommand(string flags = "", string desc = "") {
         assert(!this._helpCommand);
@@ -1765,25 +1785,8 @@ public:
                         hname, version_cmd_names));
             }
         }
-        ActionCallback_1 fn = (options, hcommand) {
-            if (hcommand.isValid) {
-                auto sub_cmd_name = hcommand.get!string;
-                auto sub_cmd = this._findCommand(sub_cmd_name);
-                auto vcmd = this._versionCommand;
-                sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
-                if (!sub_cmd || sub_cmd._hidden)
-                    this.parsingError("can not find the sub command `" ~ sub_cmd_name ~ "`!");
-                if (sub_cmd._execHandler) {
-                    sub_cmd.execSubCommand([
-                        this._externalCmdHelpFlagMap[sub_cmd._name]
-                    ]);
-                }
-                sub_cmd.help();
-            }
-            this.help();
-        };
         help_cmd.parent = this;
-        help_cmd.action(fn, true);
+        help_cmd.action(&this._helpCommandAction, true);
         this._helpCommand = help_cmd;
         return setHelpCommand(true);
     }
@@ -1812,6 +1815,7 @@ public:
             }
         }
         cmd.parent = this;
+        cmd.action(&this._helpCommandAction, true);
         this._helpCommand = cmd;
         return setHelpCommand(true);
     }

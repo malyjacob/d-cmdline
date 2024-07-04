@@ -152,6 +152,9 @@ package:
     alias Self = typeof(this);
     alias ImplyOptionMap = OptionVariant[string];
 
+    bool isValueData;
+    bool innerBoolData;
+
     this(string flags, string description) {
         this.flags = flags;
         this._description = description;
@@ -184,6 +187,8 @@ package:
         this.settled = false;
         this.source = Source.None;
         this.innerImplyData = null;
+        this.isValueData = false;
+        this.innerBoolData = false;
     }
 
 public:
@@ -343,21 +348,6 @@ public:
         return (!this.optional && this.required);
     }
 
-    /// set the default value as `true`
-    /// Returns: `Self` for chain call
-    Self defaultVal() {
-        // throw new OptionMemberFnCallError;
-        return this;
-    }
-
-    /// set the config value as `true`, which is used for
-    /// inernal impletation and is not recommended for use in you project
-    /// Returns: `Self` for chain call
-    Self configVal() {
-        // throw new OptionMemberFnCallError;
-        return this;
-    }
-
     /// set the imply value as `true`, which is used for
     /// inernal impletation and is not recommended for use in you project
     /// Returns: `Self` for chain call
@@ -367,7 +357,7 @@ public:
         return this;
     }
 
-    /// set the option value from `env`
+    /// set the option value from `en`
     Self envVal() {
         // throw new OptionMemberFnCallError;
         return this;
@@ -453,6 +443,18 @@ public:
         }
     }
 
+    /// set the default value `true`, only for `BooleanOption`.
+    /// Returns: `Self` for chain call
+    Self defaultVal() {
+        auto derived = cast(BoolOption) this;
+        if (!derived) {
+            error(format!"connot cast the option `%s` to bool option using `Option.default()`"(
+                    this.flags));
+        }
+        derived.defaultVal(true);
+        return this;
+    }
+
     /// set the default value
     /// Params:
     ///   value = the value to be set as default value, `T` must satisfy `isBaseOptionValueType`
@@ -465,8 +467,8 @@ public:
             auto derived = cast(ValueOption!T) this;
         }
         if (!derived) {
-            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
-                    T.stringof));
+            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    T.stringof, this.flags));
         }
         return derived.defaultVal(value);
     }
@@ -480,8 +482,8 @@ public:
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
-                    T.stringof));
+            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    T.stringof, this.flags));
         }
         return derived.defaultVal(value, rest);
     }
@@ -493,7 +495,7 @@ public:
     /// Returns: `Self`` for chain call
     Self defaultVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            error("the values length cannot be zero");
+            error("the values length cannot be zero using `Self defaultVal(T)(in T[] values)`");
         }
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
@@ -508,7 +510,8 @@ package:
         }
         if (!derived) {
             parsingError(
-                format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    this.flags,
                     T.stringof));
         }
         return derived.configVal(value);
@@ -519,7 +522,8 @@ package:
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
             parsingError(
-                format!"the value type is `%s` while the option inner type is not the type or related array type"(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    this.flags,
                     T.stringof));
         }
         return derived.configVal(value, rest);
@@ -527,7 +531,7 @@ package:
 
     Self configVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            parsingError("the values length cannot be zero");
+            parsingError(format!"the values length cannot be zero in option `%s`"(this.flags));
         }
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
@@ -550,7 +554,7 @@ package:
 
     Self implyVal(T)(T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            parsingError("the values length cannot be zero");
+            parsingError(format!"the values length cannot be zero in option `%s`"(this.flags));
         }
         return implyVal(values[0], values[1 .. $]);
     }
@@ -584,8 +588,8 @@ public:
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
-                    T.stringof));
+            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    T.stringof, this.flags));
         }
         return derived.preset(value);
     }
@@ -599,8 +603,8 @@ public:
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option inner type is not the type or related array type"(
-                    T.stringof));
+            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                    T.stringof, this.flags));
         }
         return derived.preset(value, rest);
     }
@@ -611,15 +615,51 @@ public:
     /// Returns: `Self` for chain call
     Self preset(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            error("the values length cannot be zero");
+            error("the values length cannot be zero using `Self preset(T)(in T[] values)`");
         }
         return preset(values[0], cast(T[]) values[1 .. $]);
     }
 
     /// get inner value in the specified type, `T` usually is among `OptionValueSeq`
     /// Returns: the result value
-    T get(T)() const {
-        return this.get.get!T;
+    T get(T)() const if (isBaseOptionValueType!T && !is(T == bool)) {
+        assert(isValueData);
+        auto derived_1 = cast(ValueOption!T) this;
+        auto derived_2 = cast(VariadicOption!T) this;
+        if (derived_1) {
+            return derived_1.get!T;
+        }
+        if (derived_2) {
+            return derived_2.get!T;
+        }
+        error(format!"connot get the value of type `%s` from option `%s`"(
+                T.stringof,
+                this.flags
+        ));
+        return T.init;
+    }
+
+    /// get inner value in the specified type, `T` usually is among `OptionValueSeq`
+    /// Returns: the result value
+    T get(T : bool)() const {
+        assert(!isValueData);
+        return this.innerBoolData;
+    }
+
+    /// get inner value in the specified type, `T` usually is among `OptionValueSeq`
+    /// Returns: the result value
+    T get(T)() const
+    if (!is(ElementType!T == void) && isBaseOptionValueType!(ElementType!T)) {
+        alias Ele = ElementType!T;
+        static assert(!is(Ele == bool));
+        assert(isValueData);
+        auto derived = cast(VariadicOption!Ele) this;
+        if (!derived)
+            error(format!"connot get the value of type `%s` from option `%s`"(
+                    Ele.stringof,
+                    this.flags
+            ));
+        return derived.get!T;
     }
 
     /// set the parsing function using for transforming from `string` to `T`
@@ -874,8 +914,6 @@ package class BoolOption : Option {
     Nullable!bool configArg;
     Nullable!bool defaultArg;
 
-    bool innerData;
-
     this(string flags, string description) {
         super(flags, description);
         if (!this.isBoolean || this.variadic) {
@@ -885,7 +923,6 @@ package class BoolOption : Option {
         // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
-        this.innerData = false;
     }
 
     alias Self = typeof(this);
@@ -895,25 +932,15 @@ package class BoolOption : Option {
         return this;
     }
 
-    override Self defaultVal() {
-        this.defaultArg = true;
-        return this;
-    }
-
-    Self configVal(bool value) {
+    Self configVal(bool value = true) {
         this.configArg = value;
-        return this;
-    }
-
-    override Self configVal() {
-        this.configArg = true;
         return this;
     }
 
     override Self implyVal(OptionVariant value) {
         alias test_bool = visit!((bool v) => true, v => false);
         if (!test_bool(value))
-            parsingError("the imply value must be a bool value");
+            parsingError(format!"the imply value must be a bool value in option %s"(this.flags));
         this.innerImplyData = value;
         return this;
     }
@@ -942,27 +969,27 @@ package class BoolOption : Option {
         }
         this.settled = true;
         if (this.found) {
-            this.innerData = (true);
+            this.innerBoolData = (true);
             this.source = Source.Cli;
             return this;
         }
         // if (!this.implyArg.isNull) {
-        //     this.innerData = this.implyArg.get;
+        //     this.innerBoolData = this.implyArg.get;
         //     this.source = Source.Imply;
         //     return this;
         // }
-        if (!this.innerImplyData.isNull) {
-            this.innerData = this.innerImplyData.get!bool;
-            this.source = Source.Imply;
-            return this;
-        }
         if (!this.configArg.isNull) {
-            this.innerData = this.configArg.get;
+            this.innerBoolData = this.configArg.get;
             this.source = Source.Config;
             return this;
         }
+        if (!this.innerImplyData.isNull) {
+            this.innerBoolData = this.innerImplyData.get!bool;
+            this.source = Source.Imply;
+            return this;
+        }
         if (!this.defaultArg.isNull) {
-            this.innerData = this.defaultArg.get;
+            this.innerBoolData = this.defaultArg.get;
             this.source = Source.Default;
             return this;
         }
@@ -972,13 +999,13 @@ package class BoolOption : Option {
     @property
     override OptionVariant get() const {
         assert(this.settled);
-        return OptionVariant(this.innerData);
+        return OptionVariant(this.innerBoolData);
     }
 
     @property
     bool get(T : bool)() const {
         assert(this.settled);
-        return this.innerData;
+        return this.innerBoolData;
     }
 
     override string typeStr() const {
@@ -1007,15 +1034,15 @@ package class ValueOption(T) : Option {
     Nullable!T cliArg;
     Nullable!T envArg;
     // Nullable!(T, bool) implyArg;
-    Nullable!(T, bool) configArg;
-    Nullable!(T, bool) defaultArg;
+    Nullable!(T) configArg;
+    Nullable!(T) defaultArg;
 
     Nullable!(T, bool) presetArg;
 
     T innerValueData;
-    bool innerBoolData;
+    // bool innerBoolData;
 
-    bool isValueData;
+    // bool isValueData;
 
     ParseArgFn!T parseFn;
     ProcessArgFn!T processFn;
@@ -1038,10 +1065,10 @@ package class ValueOption(T) : Option {
         // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
-        innerBoolData = false;
+        this.innerBoolData = false;
         innerValueData = T.init;
         this.argChoices = [];
-        isValueData = true;
+        this.isValueData = true;
         this.parseFn = (string v) => to!T(v);
         this.processFn = v => v;
         if (isRequired)
@@ -1058,15 +1085,16 @@ package class ValueOption(T) : Option {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                    error(format!"the element value of choices can not be equal in option `%s`, the values is: `%s`"(
+                            this.flags,
                             values.to!string));
                 }
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
-                        this.rangeOfStr(), values.to!string
+                error(format!"the element value of choices cannot be out of %s in option `%s`, the values is: `%s`"(
+                        this.rangeOfStr(), this.flags, values.to!string
                 ));
             }
         }
@@ -1077,16 +1105,19 @@ package class ValueOption(T) : Option {
     void _checkVal(in T value) const {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
                         this.choicesStr(),
+                        this.flags,
                         value.to!string
                 ));
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
-                        this.rangeOfStr(), value.to!string
+                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                        this.rangeOfStr(),
+                        this.flags,
+                        value.to!string
                 ));
             }
         }
@@ -1129,13 +1160,13 @@ package class ValueOption(T) : Option {
         return this;
     }
 
-    override Self defaultVal() {
-        if (!isOptional) {
-            error("the option must be optional using `Self defaultVal()`");
-        }
-        this.defaultArg = true;
-        return this;
-    }
+    // override Self defaultVal() {
+    //     if (!isOptional) {
+    //         error("the option must be optional using `Self defaultVal()`");
+    //     }
+    //     this.defaultArg = true;
+    //     return this;
+    // }
 
     Self configVal(T value) {
         _checkVal(value);
@@ -1143,18 +1174,18 @@ package class ValueOption(T) : Option {
         return this;
     }
 
-    override Self configVal() {
-        if (!isOptional) {
-            parsingError("the option must be optional using `Self configVal()`");
-        }
-        this.configArg = true;
-        return this;
-    }
+    // override Self configVal() {
+    //     if (!isOptional) {
+    //         parsingError("the option must be optional using `Self configVal()`");
+    //     }
+    //     this.configArg = true;
+    //     return this;
+    // }
 
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T v) => true, v => false);
         if (!test_t(value)) {
-            parsingError(format!"the value type must be %s"(T.stringof));
+            parsingError(format!"the value type must be %s in option `%s`"(T.stringof, this.flags));
         }
         _checkVal(value.get!T);
         this.innerImplyData = value;
@@ -1210,6 +1241,9 @@ package class ValueOption(T) : Option {
     }
 
     Self preset(T value) {
+        if (!isOptional) {
+            error("the option must be optional using `Self preset()`");
+        }
         _checkVal(value);
         this.presetArg = value;
         return this;
@@ -1269,31 +1303,18 @@ package class ValueOption(T) : Option {
         //     this.source = Source.Imply;
         //     return this;
         // }
-        if (!this.innerImplyData.isNull) {
-            if (test_bool(this.innerImplyData)) {
-                this.isValueData = false;
-                this.innerBoolData = this.innerImplyData.get!bool;
-            }
-            if (test_t(this.innerImplyData))
-                this.innerValueData = this.innerImplyData.get!T;
-        }
         if (!this.configArg.isNull) {
-            if (test_bool(this.configArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.configArg.get!bool;
-            }
-            if (test_t(this.configArg))
-                this.innerValueData = this.configArg.get!T;
+            this.innerValueData = this.configArg.get!T;
             this.source = Source.Config;
             return this;
         }
+        if (!this.innerImplyData.isNull) {
+            this.innerValueData = this.innerImplyData.get!T;
+            this,source = Source.Imply;
+            return this;
+        }
         if (!this.defaultArg.isNull) {
-            if (test_bool(this.defaultArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.defaultArg.get!bool;
-            }
-            if (test_t(this.defaultArg))
-                this.innerValueData = this.defaultArg.get!T;
+            this.innerValueData = this.defaultArg.get!T;
             this.source = Source.Imply;
             return this;
         }
@@ -1371,15 +1392,15 @@ package class VariadicOption(T) : Option {
     Nullable!(T[]) cliArg;
     Nullable!(T[]) envArg;
     // Nullable!(T[], bool) implyArg;
-    Nullable!(T[], bool) configArg;
-    Nullable!(T[], bool) defaultArg;
+    Nullable!(T[]) configArg;
+    Nullable!(T[]) defaultArg;
 
     Nullable!(T[], bool) presetArg;
 
     T[] innerValueData;
-    bool innerBoolData;
+    // bool innerBoolData;
 
-    bool isValueData;
+    // bool isValueData;
 
     ParseArgFn!T parseFn;
     ProcessArgFn!T processFn;
@@ -1404,9 +1425,9 @@ package class VariadicOption(T) : Option {
         // this.implyArg = null;
         this.configArg = null;
         this.defaultArg = null;
-        innerBoolData = false;
-        innerValueData = null;
-        isValueData = true;
+        this.innerBoolData = false;
+        this.innerValueData = null;
+        this.isValueData = true;
         this.argChoices = [];
         this.parseFn = (string v) => to!T(v);
         this.processFn = v => v;
@@ -1425,15 +1446,16 @@ package class VariadicOption(T) : Option {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal, the values is: `%s`"(
+                    error(format!"the element value of choices can not be equal in option `%s`, the values is: `%s`"(
+                            this.flags,
                             values.to!string));
                 }
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s, the values is: `%s`"(
-                        this.rangeOfStr(), values.to!string
+                error(format!"the element value of choices cannot be out of %s in option `%s`, the values is: `%s`"(
+                        this.rangeOfStr(), this.flags, values.to!string
                 ));
             }
         }
@@ -1444,16 +1466,19 @@ package class VariadicOption(T) : Option {
     void _checkVal_impl(in T value) const {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
+                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
                         this.choicesStr(),
+                        this.flags,
                         value.to!string
                 ));
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s, the value is: `%s`"(
-                        this.rangeOfStr(), value.to!string
+                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                        this.rangeOfStr(),
+                        this.flags,
+                        value.to!string
                 ));
             }
         }
@@ -1511,13 +1536,13 @@ package class VariadicOption(T) : Option {
         return this;
     }
 
-    override Self defaultVal() {
-        if (!isOptional) {
-            error("the option must be optional using `Self defaultVal()`");
-        }
-        this.defaultArg = true;
-        return this;
-    }
+    // override Self defaultVal() {
+    //     if (!isOptional) {
+    //         error("the option must be optional using `Self defaultVal()`");
+    //     }
+    //     this.defaultArg = true;
+    //     return this;
+    // }
 
     Self configVal(T value, T[] rest...) {
         auto tmp = [value] ~ rest;
@@ -1526,18 +1551,18 @@ package class VariadicOption(T) : Option {
         return this;
     }
 
-    override Self configVal() {
-        if (!isOptional) {
-            parsingError("the option must be optional using `Self configVal()`");
-        }
-        this.configArg = true;
-        return this;
-    }
+    // override Self configVal() {
+    //     if (!isOptional) {
+    //         parsingError("the option must be optional using `Self configVal()`");
+    //     }
+    //     this.configArg = true;
+    //     return this;
+    // }
 
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T[] v) => true, (v) => false);
         if (!test_t(value)) {
-            parsingError(format!"the value type must be %s"((T[]).stringof));
+            parsingError(format!"the value type must be %s in option `%s`"((T[]).stringof, this.flags));
         }
         _checkVal(value.get!(T[]));
         this.innerImplyData = value;
@@ -1596,6 +1621,9 @@ package class VariadicOption(T) : Option {
     }
 
     Self preset(T value, T[] rest...) {
+        if (!isOptional) {
+            error("the option must be optional using `Self preset()`");
+        }
         auto tmp = [value] ~ rest;
         _checkVal(tmp);
         this.presetArg = tmp;
@@ -1656,33 +1684,18 @@ package class VariadicOption(T) : Option {
         //     this.source = Source.Imply;
         //     return this;
         // }
-        if (!this.innerImplyData.isNull) {
-            if (test_bool(this.innerImplyData)) {
-                this.isValueData = false;
-                this.innerBoolData = this.innerImplyData.get!bool;
-            }
-            if (test_t(this.innerImplyData))
-                this.innerValueData = this.innerImplyData.get!(T[]);
-            this.source = Source.Imply;
-            return this;
-        }
         if (!this.configArg.isNull) {
-            if (test_bool(this.configArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.configArg.get!bool;
-            }
-            if (test_t(this.configArg))
-                this.innerValueData = this.configArg.get!(T[]);
+            this.innerValueData = this.configArg.get!(T[]);
             this.source = Source.Config;
             return this;
         }
+        if (!this.innerImplyData.isNull) {
+            this.innerValueData = this.innerImplyData.get!(T[]);
+            this.source = Source.Imply;
+            return this;
+        }
         if (!this.defaultArg.isNull) {
-            if (test_bool(this.defaultArg)) {
-                this.isValueData = false;
-                this.innerBoolData = this.defaultArg.get!bool;
-            }
-            if (test_t(this.defaultArg))
-                this.innerValueData = this.defaultArg.get!(T[]);
+            this.innerValueData = this.defaultArg.get!(T[]);
             this.source = Source.Imply;
             return this;
         }
@@ -1768,7 +1781,6 @@ unittest {
     vopt.initialize;
     assert(vopt.get!int == 28);
 }
-
 
 /++ 
 the negate option like `--no-flag`, which is controller option that doesn't contains inner value.

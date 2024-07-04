@@ -24,7 +24,9 @@
                 "\"$DUB\" build -c defcmd",
                 "\"$DUB\" build -c jread",
                 "\"$DUB\" build -c greet",
-                "\"$DUB\" build -c variadic"
+                "\"$DUB\" build -c variadic",
+                "\"$DUB\" build -c defaultval",
+                "\"$DUB\" build -c env"
             ]
         },
         {
@@ -38,7 +40,9 @@
                 "\"$DUB\" build -c defcmd -b release",
                 "\"$DUB\" build -c jread -b release",
                 "\"$DUB\" build -c greet -b release",
-                "\"$DUB\" build -c variadic -b release"
+                "\"$DUB\" build -c variadic -b release",
+                "\"$DUB\" build -c defaultval -b release",
+                "\"$DUB\" build -c env -b release"
             ]
         },
         {
@@ -80,6 +84,16 @@
             "name": "variadic",
             "targetName": "variadic",
             "mainSourceFile": "./variadic.d"
+        },
+        {
+            "name": "defaultval",
+            "targetName": "defaultval",
+            "mainSourceFile": "./defaultval.d"
+        },
+        {
+            "name": "env",
+            "targetName": "env",
+            "mainSourceFile": "./env.d"
         }
     ]
 }
