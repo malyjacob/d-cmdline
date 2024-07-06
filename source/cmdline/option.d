@@ -155,6 +155,8 @@ package:
     bool isValueData;
     bool innerBoolData;
 
+    bool _isMerge;
+
     this(string flags, string description) {
         this.flags = flags;
         this._description = description;
@@ -189,6 +191,7 @@ package:
         this.innerImplyData = null;
         this.isValueData = false;
         this.innerBoolData = false;
+        _isMerge = true;
     }
 
 public:
@@ -251,8 +254,8 @@ public:
                 }
             }
             if (signal)
-                error(format!"the implies key must be unique, here is keys: `%s`"(
-                        names.to!string));
+                error(format!"the implies key must be unique, here are keys: `%s`, key: `%s`"(
+                        implyMap.byKey.to!string, name));
             implyMap[name ~ ":" ~ bool.stringof] = true;
         }
         return this;
@@ -272,7 +275,8 @@ public:
             }
         }
         if (signal)
-            error(format!"the implies key must be unique, here is keys: `%s`"(names.to!string));
+            error(format!"the implies key must be unique, here are keys: `%s`, key: `%s`"(
+                    implyMap.byKey.to!string, key));
         implyMap[key ~ ":" ~ T.stringof] = value;
         return this;
     }
@@ -348,6 +352,17 @@ public:
         return (!this.optional && this.required);
     }
 
+    /// Test is allowed to merge variadic final value from different source, default `true`
+    bool isMerge() const {
+        return this._isMerge;
+    }
+
+    /// whether is allowed to merge variadic final value from different source, default `true`
+    Self merge(bool allow = true) {
+        this._isMerge = allow;
+        return this;
+    }
+
     /// set the imply value as `true`, which is used for
     /// inernal impletation and is not recommended for use in you project
     /// Returns: `Self` for chain call
@@ -405,12 +420,28 @@ public:
         auto is_variadic = this.variadic;
         if (is_variadic) {
             auto derived = cast(VariadicOption!T) this;
+            if (!derived) {
+                error(format!"the element type of the inner value of option `%s` is not `%s` in `Option.choices`"(
+                        this.flags,
+                        T.stringof
+                ));
+            }
+            return derived.choices(values);
+        }
+        else if (!this.isBoolean) {
+            auto derived = cast(ValueOption!T) this;
+            if (!derived) {
+                error(format!"the type of the inner value of option `%s` is not `%s` in `Option.choices"(
+                        this.flags,
+                        T.stringof
+                ));
+            }
             return derived.choices(values);
         }
         else {
-            auto derived = cast(ValueOption!T) this;
-            return derived.choices(values);
+            error(format!"connnot use `Option.choices` for option `%s` is bool option"(this.flags));
         }
+        return this;
     }
 
     /// set the choices of argument inner type
@@ -435,10 +466,22 @@ public:
         auto is_variadic = this.variadic;
         if (is_variadic) {
             auto derived = cast(VariadicOption!T) this;
+            if (!derived) {
+                error(format!"the element type of the inner value of option `%s` is not `%s` in `Option.rangeOf`"(
+                        this.flags,
+                        T.stringof
+                ));
+            }
             return derived.rangeOf(min, max);
         }
         else {
             auto derived = cast(ValueOption!T) this;
+            if (!derived) {
+                error(format!"the type of the inner value of option `%s` is not `%s` in `Option.rangeOf"(
+                        this.flags,
+                        T.stringof
+                ));
+            }
             return derived.rangeOf(min, max);
         }
     }
@@ -467,7 +510,8 @@ public:
             auto derived = cast(ValueOption!T) this;
         }
         if (!derived) {
-            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+            error(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
                     T.stringof, this.flags));
         }
         return derived.defaultVal(value);
@@ -482,7 +526,8 @@ public:
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+            error(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
                     T.stringof, this.flags));
         }
         return derived.defaultVal(value, rest);
@@ -588,7 +633,8 @@ public:
     Self preset(T)(T value) if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(ValueOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+            error(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
                     T.stringof, this.flags));
         }
         return derived.preset(value);
@@ -603,7 +649,8 @@ public:
             if (isBaseOptionValueType!T && !is(T == bool)) {
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+            error(
+                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
                     T.stringof, this.flags));
         }
         return derived.preset(value, rest);
@@ -643,6 +690,12 @@ public:
     /// Returns: the result value
     T get(T : bool)() const {
         assert(!isValueData);
+        if (isValueData) {
+            error(format!"connot get the value of type `%s` from option `%s`"(
+                T.stringof,
+                this.flags
+            ));
+        }
         return this.innerBoolData;
     }
 
@@ -668,18 +721,22 @@ public:
     Self parser(alias fn)() {
         alias T = typeof({ string v; return fn(v); }());
         static assert(isBaseOptionValueType!T && !is(T == bool));
-        Self result_this;
-        try {
-            auto derived = this.to!(ValueOption!T);
-            derived.parseFn = fn;
-            result_this = derived;
+        auto derived_1 = cast(ValueOption!T) this;
+        auto derived_2 = cast(VariadicOption!T) this;
+
+        if (derived_1) {
+            derived_1.parseFn = fn;
+            return derived_1;
         }
-        catch (ConvException e) {
-            auto derived = this.to!(VariadicOption!T);
-            derived.parseFn = fn;
-            result_this = derived;
+        if (derived_2) {
+            derived_2.parseFn = fn;
+            return derived_2;
         }
-        return result_this;
+        error(format!"connot set the parser fn `%s` to option `%s`"(
+                typeof(fn).stringof,
+                this.flags
+        ));
+        return this;
     }
 
     /// set the process function for processing the value parsed by innner parsing function
@@ -691,18 +748,22 @@ public:
         static assert(param_t.length == 1 && is(return_t == param_t[0]));
         static assert(isBaseOptionValueType!return_t && !is(return_t == bool));
         alias T = return_t;
-        Self result_this;
-        try {
-            auto derived = this.to!(ValueOption!T);
-            derived.processFn = fn;
-            result_this = derived;
+        auto derived_1 = cast(ValueOption!T) this;
+        auto derived_2 = cast(VariadicOption!T) this;
+        if (derived_1) {
+            derived_1.processFn = fn;
+            return derived_1;
         }
-        catch (ConvException e) {
-            auto derived = this.to!(VariadicOption!T);
-            derived.processFn = fn;
-            result_this = derived;
+        if (derived_2) {
+            derived_2.processFn = fn;
+            return derived_2;
         }
-        return result_this;
+        error(format!"connot set the processor fn `%s` to option `%s`"(
+                typeof(fn)
+                .stringof,
+                this.flags
+        ));
+        return this;
     }
 
     /// set the reduce process function for reducely processing the value parsed by innner parsing function or process function
@@ -715,7 +776,13 @@ public:
         static assert(allSameType!(return_t, param_t) && param_t.length == 2);
         alias T = return_t;
         static assert(isBaseOptionValueType!T && !is(T == bool));
-        auto derived = this.to!(VariadicOption!T);
+        auto derived = cast(VariadicOption!T) this;
+        if (!derived) {
+            error(format!"connot set the process reducer fn `%s` to option `%s`"(
+                    typeof(fn).stringof,
+                    this.flags
+            ));
+        }
         derived.processReduceFn = fn;
         return derived;
     }
@@ -1310,12 +1377,12 @@ package class ValueOption(T) : Option {
         }
         if (!this.innerImplyData.isNull) {
             this.innerValueData = this.innerImplyData.get!T;
-            this,source = Source.Imply;
+            this, source = Source.Imply;
             return this;
         }
         if (!this.defaultArg.isNull) {
             this.innerValueData = this.defaultArg.get!T;
-            this.source = Source.Imply;
+            this.source = Source.Default;
             return this;
         }
         return this;
@@ -1324,9 +1391,7 @@ package class ValueOption(T) : Option {
     @property
     override OptionVariant get() const {
         assert(this.settled);
-        auto fn = this.processFn;
-        T tmp = fn(this.innerValueData);
-        return isValueData ? OptionVariant(tmp) : OptionVariant(this.innerBoolData);
+        return isValueData ? OptionVariant(this.get!T) : OptionVariant(this.get!bool);
     }
 
     @property
@@ -1431,7 +1496,7 @@ package class VariadicOption(T) : Option {
         this.argChoices = [];
         this.parseFn = (string v) => to!T(v);
         this.processFn = v => v;
-        this.processReduceFn = (T cur, T prev) => cur;
+        this.processReduceFn = null;
         if (isRequired)
             this.presetArg = null;
         else if (isOptional)
@@ -1562,7 +1627,8 @@ package class VariadicOption(T) : Option {
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T[] v) => true, (v) => false);
         if (!test_t(value)) {
-            parsingError(format!"the value type must be %s in option `%s`"((T[]).stringof, this.flags));
+            parsingError(format!"the value type must be %s in option `%s`"((T[])
+                    .stringof, this.flags));
         }
         _checkVal(value.get!(T[]));
         this.innerImplyData = value;
@@ -1696,7 +1762,7 @@ package class VariadicOption(T) : Option {
         }
         if (!this.defaultArg.isNull) {
             this.innerValueData = this.defaultArg.get!(T[]);
-            this.source = Source.Imply;
+            this.source = Source.Default;
             return this;
         }
         return this;
@@ -1705,12 +1771,7 @@ package class VariadicOption(T) : Option {
     @property
     override OptionVariant get() const {
         assert(this.settled);
-        if (isValueData) {
-            auto fn = this.processFn;
-            auto tmp = this.innerValueData.map!fn.array;
-            return OptionVariant(tmp);
-        }
-        return OptionVariant(this.innerBoolData);
+        return isValueData ? OptionVariant(this.get!(T[])) : OptionVariant(this.get!bool);
     }
 
     @property
@@ -1735,6 +1796,12 @@ package class VariadicOption(T) : Option {
         assert(this.isValueData);
         auto process_fn = this.processFn;
         auto reduce_fn = this.processReduceFn;
+        if (!reduce_fn) {
+            error(format!"connot get `%s` value from option `%s`"(
+                U.stringof,
+                this.flags
+            ));
+        }
         auto tmp = this.innerValueData
             .map!process_fn
             .reduce!reduce_fn;

@@ -26,7 +26,10 @@
                 "\"$DUB\" build -c greet",
                 "\"$DUB\" build -c variadic",
                 "\"$DUB\" build -c defaultval",
-                "\"$DUB\" build -c env"
+                "\"$DUB\" build -c env",
+                "\"$DUB\" build -c implies",
+                "\"$DUB\" build -c preset",
+                "\"$DUB\" build -c optx"
             ]
         },
         {
@@ -42,7 +45,10 @@
                 "\"$DUB\" build -c greet -b release",
                 "\"$DUB\" build -c variadic -b release",
                 "\"$DUB\" build -c defaultval -b release",
-                "\"$DUB\" build -c env -b release"
+                "\"$DUB\" build -c env -b release",
+                "\"$DUB\" build -c implies -b release",
+                "\"$DUB\" build -c preset -b release",
+                "\"$DUB\" build -c optx -b release"
             ]
         },
         {
@@ -94,6 +100,26 @@
             "name": "env",
             "targetName": "env",
             "mainSourceFile": "./env.d"
+        },
+        {
+            "name": "implies",
+            "targetName": "implies",
+            "mainSourceFile": "./implies.d"
+        },
+        {
+            "name": "preset",
+            "targetName": "preset",
+            "mainSourceFile": "./preset.d"
+        },
+        {
+            "name": "config",
+            "targetName": "config",
+            "mainSourceFile": "./config.d"
+        },
+        {
+            "name": "optx",
+            "targetName": "optx",
+            "mainSourceFile": "./optx.d"
         }
     ]
 }

@@ -1,0 +1,12 @@
+{
+    "sub": {
+        "options": {
+            "first": 12,
+            "second": 13
+        }
+    },
+    "arguments": [12, 13],
+    "options": {
+        "multi": 4
+    }
+}
