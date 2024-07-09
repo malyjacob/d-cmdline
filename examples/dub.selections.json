@@ -2,6 +2,8 @@
 	"fileVersion": 1,
 	"versions": {
 		"cmdline": {"path":"../"},
-		"mir-core": "1.7.1"
+		"colored": "0.0.31",
+		"mir-core": "1.7.1",
+		"unit-threaded": "2.1.9"
 	}
 }

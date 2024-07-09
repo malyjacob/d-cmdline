@@ -29,7 +29,8 @@
                 "\"$DUB\" build -c env",
                 "\"$DUB\" build -c implies",
                 "\"$DUB\" build -c preset",
-                "\"$DUB\" build -c optx"
+                "\"$DUB\" build -c optx",
+                "\"$DUB\" build -c inject"
             ]
         },
         {
@@ -48,7 +49,8 @@
                 "\"$DUB\" build -c env -b release",
                 "\"$DUB\" build -c implies -b release",
                 "\"$DUB\" build -c preset -b release",
-                "\"$DUB\" build -c optx -b release"
+                "\"$DUB\" build -c optx -b release",
+                "\"$DUB\" build -c inject -b release"
             ]
         },
         {
@@ -120,6 +122,11 @@
             "name": "optx",
             "targetName": "optx",
             "mainSourceFile": "./optx.d"
+        },
+        {
+            "name": "inject",
+            "targetName": "inject",
+            "mainSourceFile": "./inject.d"
         }
     ]
 }

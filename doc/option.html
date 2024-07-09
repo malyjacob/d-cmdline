@@ -1935,7 +1935,7 @@ which is set by <code class="code">this.env</code>
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
-  <a href="#Option.defaultVal" id="Option.defaultVal"><code class="code">defaultVal</code></a>
+  <a href="#Option.isMerge" id="Option.isMerge"><code class="code">isMerge</code></a>
 </div>
 </div><div class="ddoc_decl">
   <section class="section">
@@ -1944,7 +1944,7 @@ which is set by <code class="code">this.env</code>
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Option.defaultVal"></span>Self <code class="code">defaultVal</code>();
+            <span class="ddoc_anchor" id="Option.isMerge"></span>const bool <code class="code">isMerge</code>();
 
           </code>
         </p>
@@ -1956,14 +1956,7 @@ which is set by <code class="code">this.env</code>
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    set the default value as <code class="code">true</code>
-
-  </p>
-</div>
-<div class="ddoc_returns">
-  <h4>Return Value</h4>
-  <p class="para">
-    <code class="code">Self</code> for chain call
+    Test is allowed to merge variadic final value from different source, default <code class="code">true</code>
   </p>
 </div>
 
@@ -1974,7 +1967,7 @@ which is set by <code class="code">this.env</code>
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
-  <a href="#Option.configVal" id="Option.configVal"><code class="code">configVal</code></a>
+  <a href="#Option.merge" id="Option.merge"><code class="code">merge</code></a>
 </div>
 </div><div class="ddoc_decl">
   <section class="section">
@@ -1983,7 +1976,7 @@ which is set by <code class="code">this.env</code>
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Option.configVal"></span>Self <code class="code">configVal</code>();
+            <span class="ddoc_anchor" id="Option.merge"></span>Self <code class="code">merge</code>(bool <code class="code">allow</code> = true);
 
           </code>
         </p>
@@ -1995,15 +1988,7 @@ which is set by <code class="code">this.env</code>
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    set the config value as <code class="code">true</code>, which is used for
-inernal impletation and is not recommended for use in you project
-
-  </p>
-</div>
-<div class="ddoc_returns">
-  <h4>Return Value</h4>
-  <p class="para">
-    <code class="code">Self</code> for chain call
+    whether is allowed to <code class="code">merge</code> variadic final value from different source, default <code class="code">true</code>
   </p>
 </div>
 
@@ -2075,7 +2060,7 @@ inernal impletation and is not recommended for use in you project
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    set the option value from <code class="code">env</code>
+    set the option value from <code class="code">en</code>
   </p>
 </div>
 
@@ -2562,6 +2547,45 @@ inernal impletation and is not recommended for use in you project
       <div class="dlang">
         <p class="para">
           <code class="code">
+            <span class="ddoc_anchor" id="Option.defaultVal"></span>Self <code class="code">defaultVal</code>();
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    set the default value <code class="code">true</code>, only for <code class="code">BooleanOption</code>.
+
+  </p>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Option.defaultVal" id="Option.defaultVal"><code class="code">defaultVal</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
             <span class="ddoc_anchor" id="Option.defaultVal.2"></span>Self <code class="code">defaultVal</code>(T)(T <code class="code">value</code>) if (isBaseOptionValueType!T);
 
           </code>
@@ -2962,7 +2986,85 @@ inernal impletation and is not recommended for use in you project
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Option.get.2"></span>const T <code class="code">get</code>(T)();
+            <span class="ddoc_anchor" id="Option.get.2"></span>const T <code class="code">get</code>(T)() if (isBaseOptionValueType!T &amp;&amp; !is(T == bool));
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    <code class="code">get</code> inner value in the specified type, <code class="code">T</code> usually is among <code class="code">OptionValueSeq</code>
+
+  </p>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    the result value
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Option.get" id="Option.get"><code class="code">get</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Option.get.3"></span>const T <code class="code">get</code>(T : bool)();
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    <code class="code">get</code> inner value in the specified type, <code class="code">T</code> usually is among <code class="code">OptionValueSeq</code>
+
+  </p>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    the result value
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Option.get" id="Option.get"><code class="code">get</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Option.get.4"></span>const T <code class="code">get</code>(T)() if (!is(ElementType!T == void) &amp;&amp; isBaseOptionValueType!(ElementType!T));
 
           </code>
         </p>

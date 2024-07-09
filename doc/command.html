@@ -1690,7 +1690,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
-  <a href="#Command.getOptionVal" id="Command.getOptionVal"><code class="code">getOptionVal</code></a>
+  <a href="#Command.getOptVal" id="Command.getOptVal"><code class="code">getOptVal</code></a>
 </div>
 </div><div class="ddoc_decl">
   <section class="section">
@@ -1699,7 +1699,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Command.getOptionVal"></span>const ArgWrap <code class="code">getOptionVal</code>(string <code class="code">key</code>);
+            <span class="ddoc_anchor" id="Command.getOptVal"></span>const ArgWrap <code class="code">getOptVal</code>(string <code class="code">key</code>);
 
           </code>
         </p>
@@ -1711,7 +1711,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    get the inner value of a option by flag wrapped by <code class="code">ArgWrap</code>.
+    get the inner value of a option by name wrapped by <code class="code">ArgWrap</code>.
 remember better use it in action callabck or after parsing
 
   </p>
@@ -1729,7 +1729,7 @@ remember better use it in action callabck or after parsing
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      the flag of option
+      the name of option
     </p>
   </div>
 </td>
@@ -1742,6 +1742,67 @@ remember better use it in action callabck or after parsing
   <h4>Return Value</h4>
   <p class="para">
     the value wrapped by <code class="code">ArgWrap</code>, which may be empty when cannot find the option
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.getOptVal" id="Command.getOptVal"><code class="code">getOptVal</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.getOptVal.2"></span>const T <code class="code">getOptVal</code>(T)(string <code class="code">key</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    get the inner value in specified type of an option by flags
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">key</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the long|short flag or the name of the option
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    the inner value not wrapped
   </p>
 </div>
 
@@ -3523,6 +3584,176 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
   <p class="para">
     whether <code class="code">allow</code> excess argument, default: <code class="code">true</code>
   </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.variadicMerge" id="Command.variadicMerge"><code class="code">variadicMerge</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.variadicMerge"></span>Self <code class="code">variadicMerge</code>(bool <code class="code">allow</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    whether <code class="code">allow</code> variadic options' final values merge from different source, default: <code class="code">true</code>
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.parsingError" id="Command.parsingError"><code class="code">parsingError</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.parsingError"></span>const void <code class="code">parsingError</code>(string <code class="code">msg</code> = "", string <code class="code">code</code> = "command.error");
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    invoke error when parsing command line
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">msg</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the error message
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">code</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">code</code> to tag the error
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.error" id="Command.error"><code class="code">error</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.error"></span>const void <code class="code">error</code>(string <code class="code">msg</code> = "", string <code class="code">code</code> = "command.<code class="code">error</code>");
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    invoke <code class="code">error</code> when configuring command
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">msg</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">error</code> message
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">code</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">code</code> to tag the <code class="code">error</code>
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
 </div>
 
 </section>

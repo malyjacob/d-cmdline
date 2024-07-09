@@ -427,11 +427,7 @@ $ default -ckabpa -smint
 
 we can use `Option.preset` to assign value to an optional option. And if the flag of an optional option exists on command line but not its value next to, the value set by `Option.preset` would be the final value of this option.
 
-
-
 In fact, when we defined or create an optional option, we implicitly call `Option.preset(true)` to it.
-
-
 
 Here is an example:
 
@@ -444,7 +440,7 @@ import cmdline;
 
 void main(in string[] argv) {
     program.name("preset");
-    
+
     Option pre_opt = createOption!string("-p,--pre [name]");
     pre_opt.defaultVal("dmd");
     pre_opt.preset("dub");
@@ -524,11 +520,7 @@ $ env -fxx
 
 `Option.implies` can assign value to an option whose name is the same as this member function's first parameter if its function interface is `Self implies(T)(string key, T value)` or the elements of this member function's first parameter if its function interface is `Self implies(string[] names)`.
 
-
-
 we can implicitly decided an option's final  value using this function.
-
-
 
 Here is an example:
 
@@ -579,9 +571,6 @@ void main(in string[] argv) {
 }
 ```
 
-
-
-
 ```bash
 $ implies
 # set bar <0>, unset imply, unset foo, unset fox, unset baz.
@@ -589,25 +578,15 @@ $ implies --imply=1
 # set bar <13>, set imply <1>, set foo `true`, set fox `true`, set baz false.
 ```
 
-
-
 #### Command.setConfigOption
 
 In fact, we can also obtain values from the configuration file to options.
 
-
-
 To use this feature, we must call `Command.setConfigOption` to your target command.
-
-
 
 By default, it will auto-detect the config file on the directory where the command line program binary is and the default config file's name is `${YOUR_PROGRAM_NAME}.config.json`.
 
-
-
 the configuration file is `json` file, you can see [a example of config file](./examples/bin/config.config.json) for details.
-
-
 
 Here is an example:
 
@@ -657,7 +636,6 @@ void main(in string[] argv) {
 
     program.parse(argv);
 }
-
 ```
 
 the config file `config.config.json` is:
@@ -694,13 +672,9 @@ $ config sub -f34
 # sub:    34 - 13 = 21
 ```
 
-
-
 #### The priority of option value source
 
 According to above, we can assign value to an option by manly way from different source. However, what if we assign value to an option by different ways at the same time? Then, what the final value it is?
-
-
 
 To cope with this problem, `d-cmdline` give different priorities to different source.
 
@@ -713,33 +687,21 @@ Roughly, the priority rank is below:
 
 And if an option have implied other options' value while its final value's `Source` 's priority is `Imply` or lower, the final value of these other options would not take  the value that be implied.
 
-
-
 ### Option value filter and parsing behavior
 
 `d-cmdline` also give some input value checker, if the input value of command line is not satisfied with its checker, then an error will be invoked.
 
-
-
 And you can also customize the options' parsing behavior, which will change what the final value is.
-
-
 
 #### Option.choices
 
 we can use it to make sure that the option value is one of what `Option.choices` specifies is. If the input value is not among what `Option.choices`, then an error will be invoked. This member function should not be used on bool options.
 
-
-
 #### Option.rangeOf
 
 And if the option's inner valut type is `int`,`double`, `int[]` and `double[]`, we can use `Option.rangeOf` to make sure the option value is in the range between [`min`, `max`], `min` and `max` are the two parameters of `Option.rangeOf`.
 
-
-
 If you want to use `Option.choices` and `Option.rangeOf` on the same option, you'd be better to use `Option.rangeOf` before `Option.choices`, so that what the `Option.choices` specifies mustt also be in the range between [`min`, `max`].
-
-
 
 #### Option.parser, Option.processor, Option.processReducer
 
@@ -749,19 +711,13 @@ These three member functions will change the behavior the parsing of option valu
 
 The default parsing function are `std.conv.to!(string, InnerOptionValueType)`.
 
-
-
 `Option.processor`  is used to set how to process the value parsed by function that is specified by `Option.parser`.
 
 the default processor function are `(T v) => v`.
 
-
-
 `Option.processReducer` is used only for variadic option so that we can get its value in its Element Type which is processed by the function that `Option.processReducer` speicifies.
 
 the default process-reducer function pointer is `null`. So, if you don't set it, you can get the value of array type.
-
-
 
 Here is an example:
 
@@ -820,4 +776,6 @@ $ optx -r9 -ch -n1 -n 12 12
 # 10, h+, 25
 ```
 
- 
+
+
+## Arguments

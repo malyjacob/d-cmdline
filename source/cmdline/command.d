@@ -116,6 +116,7 @@ package:
     bool _showSuggestionAfterError = true;
     bool _combineFlagAndOptionalValue = true;
     bool _variadicMerge = true;
+    bool _allowExposeOptionValue = false;
 
     void delegate() _actionHandler = null;
     Help _helpConfiguration = new Help;
@@ -135,6 +136,9 @@ package:
     const(JSONValue)* jconfig = null;
 
     string[] _argToOptNames = [];
+
+    string[] _provide_arr = [];
+    string[] _inject_arr = [];
 
     this(string name) {
         this._name = name;
@@ -186,6 +190,13 @@ public:
         return this._helpConfiguration;
     }
 
+    /// register an option that can be as the argument of command line.
+    /// remember that it is positional sensitive and if you want to registered a variadic
+    /// option, this option must be registered at the end and not other variadic options to be registered
+    /// Params:
+    ///   optName = the option's name or its long/short flag to be registered
+    ///   rest = the rest be registered
+    /// Returns: `Self` for chain call
     Self argToOpt(string optName, string[] rest...) {
         auto tmp = [optName] ~ rest;
         string variadic = "";
@@ -194,7 +205,7 @@ public:
                 this.error(
                     format!"not allowed to register option `%s` after variadic option `%s` which is also registered as argument"(
                         key, variadic
-                    ));
+                ));
             auto opt = _findOption(key);
             if (!opt) {
                 this.error(
@@ -643,6 +654,224 @@ public:
         return _optionImpl!(T, true)(flags, desc, defaultValue);
     }
 
+    /// expose its option values by names to its sub or sub sub and etc command.
+    /// its sub or sub sub and etc command can access these option values using `Command.injects` by names.
+    /// remember that it is only useful for non-builtin options!
+    /// Params:
+    ///   name = the name of option to be exposed
+    ///   rest = the rest names of options to be exposed
+    /// Returns: `Self` for chain call
+    Self provides(in string name, in string[] rest...) {
+        auto tmp = [name] ~ rest;
+        foreach (string n; tmp) {
+            if (n.length == 0 || n[1] == '-') {
+                error(format!"the option name `\"%s\"` is not in legacy in `Command.provides`"(n));
+            }
+        }
+        if (tmp.any!(str => this._findOption(str) is null)) {
+            this.error(format!"the non-builtin option names `%s` you provide doesn't all exist in `Command.provides`"(
+                    tmp.to!string
+            ));
+        }
+        this._provide_arr.each!((str) {
+            if (str.canFind(':') && name.length < str.length
+            && (name == str[$ - name.length .. $] || name == str[0 .. name.length]))
+                error(format!"the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.provides`"(
+                    name, str
+                ));
+        });
+        this._provide_arr = (tmp ~ this._provide_arr).uniq.array;
+        return this;
+    }
+
+    /// see also `Self provides(string name, string[] rest...)`.
+    /// this member function are used for register an option to be exposed as an new name.
+    /// this is usually used when you want to avoid name confilict.
+    /// Params:
+    ///   name = the name of option to be exposed
+    ///   asName = the new name of option to be exposed
+    /// Returns: `Self` for chain call
+    Self providesAs(in string name, in string asName) {
+        if (name.length == 0 || name[1] == '-') {
+            error(format!"the option name `\"%s\"` is not in legacy in `Command.providesAs`"(name));
+        }
+        if (asName.length == 0 || asName[1] == '-') {
+            error(format!"the option as-name `\"%s\"` is not in legacy in `Command.providesAs`"(
+                    asName));
+        }
+        if (this._findOption(name) is null) {
+            this.error(
+                format!"the non-builtin option name `%s` you provide doesn't exist in `Command.providesAs`"(
+                    name));
+        }
+        if (this._findOption(asName) !is null) {
+            this.error(
+                format!"the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.providesAs`"(
+                    asName, name
+            ));
+        }
+        if (this._provide_arr.count(name) > 0) {
+            error(format!"the option name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`"(
+                    name));
+        }
+        if (this._provide_arr.count(asName) > 0) {
+            error(format!"the option as-name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`"(
+                    asName));
+        }
+        this._provide_arr.each!((str) {
+            if (str.canFind(':') && asName.length < str.length && asName == str[0 .. asName.length])
+                error(format!"the option as-name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`"(
+                    asName, str
+                ));
+        });
+        this._provide_arr.each!((str) {
+            if (str.canFind(':') && name.length < str.length && name == str[$ - name.length .. $])
+                error(format!"the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`"(
+                    name, str
+                ));
+        });
+        this._provide_arr ~= asName ~ ':' ~ name;
+        return this;
+    }
+
+    /// see also `Self providesAs(in string name, in string asName)`.
+    /// expose option values in new names at the same time
+    /// Params:
+    ///   optsMap = the map of name and asName
+    /// Returns: `Self` for chain call
+    Self providesAs(in string[string] optsMap) {
+        foreach (name, asName; optsMap) {
+            this.providesAs(name, asName);
+        }
+        return this;
+    }
+
+    /// inject the options' values exposed by ancestor command by name that are registered
+    /// using `Command.provides` or `Command.providesAs`, so that we can access this option value.
+    /// Params:
+    ///   name = the name of option to be injected
+    ///   rest = the rest name of option to be injected
+    /// Returns: `Self` for chain call
+    Self injects(in string name, in string[] rest...) {
+        auto tmp = ([name] ~ rest).uniq.array;
+        foreach (string n; tmp) {
+            if (n.length == 0 || n[1] == '-') {
+                error(format!"the option name `\"%s\"` is not in legacy in `Command.injects`"(n));
+            }
+        }
+        foreach (str; tmp) {
+            if (_findOption(str) !is null)
+                error(format!"connot inject option `%s` for this option has been exist in its option list using `Command.injects`"(
+                        str));
+        }
+        Command[] ancestors = this._getCommandAndAncestors()[1 .. $];
+        auto get_front = () => tmp.length > 0 ? tmp.front : "";
+        while (true) {
+            string str = get_front();
+            if (str == "")
+                break;
+            this._inject_arr.each!((istr) {
+                if (istr.canFind(':') && str.length < istr.length
+                && (str == istr[$ - str.length .. $] || str == istr[0 .. str.length])) {
+                    error(format!"the option name `%s` has been injected as `%s`, you cannot register it again in `Command.injects`"(
+                        str, istr
+                    ));
+                }
+            });
+            foreach (Command cmd; ancestors) {
+                auto provide_arr = cmd._provide_arr;
+                if (provide_arr.any!((pstr) {
+                        if (str.length <= pstr.length && str == pstr[0 .. str.length])
+                            return true;
+                        else
+                            return false;
+                    })) {
+                    this._inject_arr ~= str;
+                    tmp.popFront;
+                    break;
+                }
+            }
+            if (str == get_front())
+                error(format!"cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injects`"(
+                        str));
+        }
+        this._inject_arr = this._inject_arr.uniq.array;
+        return this;
+    }
+
+    /// see also `Self injects(string name, string[] rest...)`.
+    /// this member function are used for inject an option value as an new name.
+    /// this is usually used when you want to avoid name confilict.
+    /// Params:
+    ///   name = the name of option to be injected
+    ///   asName = the new name of option to be injected
+    /// Returns: `Self` for chain call
+    Self injectsAs(in string name, in string asName) {
+        if (name.length == 0 || name[1] == '-') {
+            error(format!"the option name `\"%s\"` is not in legacy in `Command.injectsAs`"(name));
+        }
+        if (asName.length == 0 || asName[1] == '-') {
+            error(format!"the option asName `\"%s\"` is not in legacy in `Command.injectsAs`"(
+                    asName));
+        }
+        if (this._findOption(asName) !is null) {
+            this.error(
+                format!"the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.injectsAs`"(
+                    asName, name
+            ));
+        }
+        if (this._inject_arr.count(name) > 0)
+            error(format!"the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`"(
+                    name));
+        if (this._inject_arr.count(asName) > 0)
+            error(format!"the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`"(
+                    asName));
+        this._inject_arr.each!((str) {
+            if (str.canFind(':') && asName.length < str.length && asName == str[0 .. asName.length])
+                error(format!"the option as-name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`"(
+                    asName, str
+                ));
+        });
+        this._inject_arr.each!((str) {
+            if (str.canFind(':') && name.length < str.length && name == str[0 .. name.length])
+                error(format!"the option name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`"(
+                    name, str
+                ));
+        });
+        Command[] ancestors = this._getCommandAndAncestors()[1 .. $];
+        bool flag = false;
+        foreach (Command cmd; ancestors) {
+            auto provide_arr = cmd._provide_arr;
+            auto str = name;
+            if (provide_arr.any!((pstr) {
+                    if (str.length <= pstr.length && str == pstr[0 .. str.length])
+                        return true;
+                    else
+                        return false;
+                })) {
+                flag = true;
+                break;
+            }
+        }
+        if (!flag)
+            error(format!"cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injectsAs`"(
+                    name));
+        this._inject_arr ~= asName ~ ':' ~ name;
+        return this;
+    }
+
+    /// see also `Self injectsAs(in string name, in string asName)`.
+    /// inject option values in new names at the same time
+    /// Params:
+    ///   optsMap = the map of name and asName
+    /// Returns: `Self` for chain call
+    Self injectsAs(in string[string] optsMap) {
+        foreach (name, asName; optsMap) {
+            injectsAs(name, asName);
+        }
+        return this;
+    }
+
 package:
     Self setOptionVal(Source src, T)(string key, T value) if (isOptionValueType!T) {
         Option opt = this._findOption(key);
@@ -988,6 +1217,40 @@ package:
             .filter!(opt => opt.settled)
             .map!(opt => tuple(opt.name, opt.get))
             .assocArray;
+        if (this.parent && this.parent._allowExposeOptionValue) {
+            auto popts = this.parent.opts;
+            foreach (string pkey, ref OptionVariant pvalue; popts) {
+                this.opts[':' ~ pkey] = pvalue;
+            }
+        }
+        if (!this._inject_arr.empty) {
+            foreach (string str; _inject_arr) {
+                string key, fkey;
+                if (str.canFind(':')) {
+                    auto tmp = str.split(':').array;
+                    key = tmp[0];
+                    fkey = tmp[1];
+                }
+                else
+                    key = fkey = str;
+                auto ancestors = this._getCommandAndAncestors()[1 .. $];
+                foreach (Command cmd; ancestors) {
+                    auto provide_arr = cmd._provide_arr;
+                    provide_arr.each!((const str) {
+                        string pkey, pfkey;
+                        if (str.canFind(':')) {
+                            auto tmp = str.split(':').array;
+                            pkey = tmp[0];
+                            pfkey = tmp[1];
+                        }
+                        else
+                            pkey = pfkey = str;
+                        if (fkey == pkey)
+                            this.opts[key] = cmd.opts[pfkey];
+                    });
+                }
+            }
+        }
         if (this.subCommand && this.subCommand._execHandler) {
             this.subCommand.execSubCommand(parsed[1]);
         }
@@ -2662,6 +2925,12 @@ public:
     /// whether allow variadic options' final values merge from different source, default: `true`
     Self variadicMerge(bool allow) {
         this._variadicMerge = allow;
+        return this;
+    }
+
+    /// whether allow expose options' values to its sub commands, default: `false`
+    Self allowExposeOptionValue(bool allow) {
+        this._allowExposeOptionValue = allow;
         return this;
     }
 

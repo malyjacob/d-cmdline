@@ -17,8 +17,11 @@ cmdline-test-*
 
 build
 .vscode
+.vs
 bin/*
 
 /examples/bin/*
 !/examples/bin/*.json
+
+/tests
 
