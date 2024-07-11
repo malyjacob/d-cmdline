@@ -1,0 +1,13 @@
+{
+    "options": {
+        "nums": [
+            22,
+            23,
+            24
+        ],
+        "strs": [
+            "gradle",
+            "vcpkg"
+        ]
+    }
+}

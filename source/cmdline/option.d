@@ -52,20 +52,20 @@ alias OptionVariant = Variant!OptionValueSeq;
 
 /// the source of the final option value gotten
 enum Source {
-    /// default value
-    None,
     /// from client terminal
     Cli,
     /// from env
     Env,
-    /// from impled value by other options
-    Imply,
     /// from config file
     Config,
+    /// from impled value by other options
+    Imply,
     /// from the value that is set by user using `defaultVal` 
     Default,
     /// from the value that is set by user using `preset`
-    Preset
+    Preset,
+    /// default value
+    None
 }
 
 /// the callback for parsing the `string` value to the target type
@@ -692,8 +692,8 @@ public:
         assert(!isValueData);
         if (isValueData) {
             error(format!"connot get the value of type `%s` from option `%s`"(
-                T.stringof,
-                this.flags
+                    T.stringof,
+                    this.flags
             ));
         }
         return this.innerBoolData;
@@ -733,7 +733,8 @@ public:
             return derived_2;
         }
         error(format!"connot set the parser fn `%s` to option `%s`"(
-                typeof(fn).stringof,
+                typeof(fn)
+                .stringof,
                 this.flags
         ));
         return this;
@@ -779,7 +780,8 @@ public:
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
             error(format!"connot set the process reducer fn `%s` to option `%s`"(
-                    typeof(fn).stringof,
+                    typeof(fn)
+                    .stringof,
                     this.flags
             ));
         }
@@ -1491,7 +1493,7 @@ package class VariadicOption(T) : Option {
         this.configArg = null;
         this.defaultArg = null;
         this.innerBoolData = false;
-        this.innerValueData = null;
+        this.innerValueData = [];
         this.isValueData = true;
         this.argChoices = [];
         this.parseFn = (string v) => to!T(v);
@@ -1654,7 +1656,11 @@ package class VariadicOption(T) : Option {
             auto fn = parseFn;
             auto xtmp = tmp.map!(fn).array;
             _checkVal(xtmp);
-            this.cliArg = xtmp;
+            if (this._isMerge) {
+                cliArg = (cliArg.isNull ? [] : cliArg.get!(T[])) ~ xtmp;
+            }
+            else
+                this.cliArg = xtmp;
         }
         catch (ConvException e) {
             parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
@@ -1719,10 +1725,13 @@ package class VariadicOption(T) : Option {
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (v) => false);
         alias test_t = visit!((T[] v) => true, (v) => false);
+        this.innerValueData = [];
         if (this.found) {
             if (!this.cliArg.isNull) {
                 this.innerValueData = this.cliArg.get!(T[]);
                 this.source = Source.Cli;
+                if (_isMerge)
+                    goto _env_ini_;
                 return this;
             }
             if (test_bool(this.presetArg)) {
@@ -1735,32 +1744,50 @@ package class VariadicOption(T) : Option {
             this.source = Source.Preset;
             return this;
         }
+    _env_ini_:
         if (!this.envArg.isNull) {
+            if (this._isMerge) {
+                this.innerValueData ~= this.envArg.get!(T[]);
+                this.source = cast(int) this.source < cast(int) Source.Env ?
+                    this.source : Source.Env;
+                goto _config_ini_;
+            }
             this.innerValueData = this.envArg.get!(T[]);
             this.source = Source.Env;
             return this;
         }
-        // if (!this.implyArg.isNull) {
-        //     if (test_bool(this.implyArg)) {
-        //         this.isValueData = false;
-        //         this.innerBoolData = this.implyArg.get!bool;
-        //     }
-        //     if (test_t(this.implyArg))
-        //         this.innerValueData = this.implyArg.get!(T[]);
-        //     this.source = Source.Imply;
-        //     return this;
-        // }
+    _config_ini_:
         if (!this.configArg.isNull) {
+            if (this._isMerge) {
+                this.innerValueData ~= this.configArg.get!(T[]);
+                this.source = cast(int) this.source < cast(int) Source.Config ?
+                    this.source : Source.Config;
+                goto _imply_ini_;
+            }
             this.innerValueData = this.configArg.get!(T[]);
             this.source = Source.Config;
             return this;
         }
+    _imply_ini_:
         if (!this.innerImplyData.isNull) {
+            if (this._isMerge) {
+                this.innerValueData ~= this.innerImplyData.get!(T[]);
+                this.source = cast(int) this.source < cast(int) Source.Imply ?
+                    this.source : Source.Imply;
+                goto _default_ini_;
+            }
             this.innerValueData = this.innerImplyData.get!(T[]);
             this.source = Source.Imply;
             return this;
         }
+    _default_ini_:
         if (!this.defaultArg.isNull) {
+            if (this._isMerge) {
+                this.innerValueData ~= this.defaultArg.get!(T[]);
+                this.source = cast(int) this.source < cast(int) Source.Default ?
+                    this.source : Source.Default;
+                return this;
+            }
             this.innerValueData = this.defaultArg.get!(T[]);
             this.source = Source.Default;
             return this;
@@ -1798,8 +1825,8 @@ package class VariadicOption(T) : Option {
         auto reduce_fn = this.processReduceFn;
         if (!reduce_fn) {
             error(format!"connot get `%s` value from option `%s`"(
-                U.stringof,
-                this.flags
+                    U.stringof,
+                    this.flags
             ));
         }
         auto tmp = this.innerValueData

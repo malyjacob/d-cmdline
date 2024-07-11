@@ -115,7 +115,7 @@ package:
     bool _showHelpAfterError = false;
     bool _showSuggestionAfterError = true;
     bool _combineFlagAndOptionalValue = true;
-    bool _variadicMerge = true;
+    bool _allowVariadicMerge = true;
     bool _allowExposeOptionValue = false;
 
     void delegate() _actionHandler = null;
@@ -503,6 +503,8 @@ package:
 public:
     /// add the option to command
     Self addOption(Option option) {
+        if (!this._allowVariadicMerge)
+            option.merge(false);
         this._registerOption(option);
         bool is_required = option.isRequired;
         bool is_optional = option.isOptional;
@@ -576,6 +578,8 @@ public:
 
     /// add the action option to command, which will invoke the callback we injected when parsing the flag of this option, only useful in client cmd
     Self addActionOption(Option option, void delegate(string[] vals...) call_back, bool endMode = true) {
+        if (!this._allowVariadicMerge)
+            option.merge(false);
         this._registerOption(option);
         string name = option.name;
         this.on("option:" ~ name, () {
@@ -646,7 +650,7 @@ public:
 
     /// see also `Self option(T)(string flags, string desc)` and define a default value for this option
     Self option(T)(string flags, string desc, T defaultValue) {
-        return _optionImpl(flags, desc, defaultValue);
+        return _optionImpl!T(flags, desc, defaultValue);
     }
 
     /// see also `Self requiredOption(T)(string flags, string desc)` and define a default value for this option
@@ -1200,19 +1204,19 @@ package:
         auto parsed = this.parseOptions(unknowns);
         this.argFlags = parsed[0];
         this.unknownFlags = parsed[1];
-        this.parseArguments(parsed[0]);
         this.parseOptionsConfig();
         this.parseOptionsImply();
         this._options
             .filter!(opt => opt.settled || opt.isValid)
             .each!((opt) { opt.initialize; });
-        _checkMissingMandatoryOption();
-        _checkConfilctOption();
+        this.parseArguments(parsed[0]);
         if (this._argToOptNames.length > 0) {
             this._options
                 .filter!(opt => opt.settled || opt.isValid)
                 .each!((opt) { opt.initialize; });
         }
+        _checkConfilctOption();
+        _checkMissingMandatoryOption();
         this.opts = this._options
             .filter!(opt => opt.settled)
             .map!(opt => tuple(opt.name, opt.get))
@@ -1581,14 +1585,14 @@ package:
                 auto opt = this._findOption(this._argToOptNames[index]);
                 if (!opt)
                     unknownOption(this._argToOptNames[index]);
+                if (opt.variadic) {
+                    this.setOptionVal!(Source.Cli)(opt.name, args);
+                    opt.settled = false;
+                    args = [];
+                    break;
+                }
                 if (!opt.isValid || !opt.settled || opt.source != Source.Cli) {
-                    if (opt.variadic) {
-                        this.setOptionVal!(Source.Cli)(opt.name, args);
-                        opt.settled = false;
-                        args = [];
-                        break;
-                    }
-                    else if (opt.isBoolean) {
+                    if (opt.isBoolean) {
                         try {
                             bool value = args[index].to!bool;
                             this.setOptionValDirectly(opt.name, value, Source.Cli);
@@ -1648,11 +1652,17 @@ package:
                 string name = tmp[0];
                 string type = tmp[1];
                 Option opt = _findOption(name);
-                if (opt && !opt.isValid)
-                    opt.implyVal(value);
-                if (opt && (opt.source == Source.Default)) {
+                if (opt && opt._isMerge) {
                     opt.settled = false;
                     opt.implyVal(value);
+                }
+                else if (opt) {
+                    if (!opt.isValid)
+                        opt.implyVal(value);
+                    if (opt.source == Source.Default) {
+                        opt.settled = false;
+                        opt.implyVal(value);
+                    }
                 }
                 auto any_abandon = this._abandons.find!(
                     (const Option opt) => opt.name == name);
@@ -2923,8 +2933,8 @@ public:
     }
 
     /// whether allow variadic options' final values merge from different source, default: `true`
-    Self variadicMerge(bool allow) {
-        this._variadicMerge = allow;
+    Self allowVariadicMerge(bool allow) {
+        this._allowVariadicMerge = allow;
         return this;
     }
 

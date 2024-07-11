@@ -127,6 +127,11 @@
             "name": "inject",
             "targetName": "inject",
             "mainSourceFile": "./inject.d"
+        },
+        {
+            "name": "varmerge",
+            "targetName": "varmerge",
+            "mainSourceFile": "./varmerge.d"
         }
     ]
 }
