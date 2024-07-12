@@ -35,6 +35,7 @@ import cmdline.pattern;
 import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
+import core.sys.posix.libgen;
 
 /// the enum represents the position of appendent help text
 enum AddHelpPos : string {
@@ -132,8 +133,8 @@ package:
     Command _versionCommand = null;
 
     Option _configOption = null;
-    string configEnvKey = "";
-    const(JSONValue)* jconfig = null;
+    const(JSONValue)*[] jconfig = [];
+    string[] _configPaths = [];
 
     string[] _argToOptNames = [];
 
@@ -1190,11 +1191,16 @@ package:
                 parsingError("cannot find the default sub command `"
                         ~ this._defaultCommandName ~ "`");
             if (this._configOption && !cmd._execHandler) {
-                auto j_config = _processConfigFile(this.configEnvKey);
-                if (j_config) {
+                auto j_config = _processConfigFile();
+                if (j_config.length) {
                     auto cmd_name = cmd._name;
-                    auto cmd_j_config = cmd_name in *j_config;
-                    cmd.jconfig = cmd_j_config;
+                    const(JSONValue)*[] tmp = [];
+                    foreach (v; j_config) {
+                        auto jtmp = cmd_name in *v;
+                        if (jtmp)
+                            tmp ~= jtmp;
+                    }
+                    cmd.jconfig = tmp;
                 }
             }
             cmd._parseCommand(unknowns);
@@ -1401,10 +1407,17 @@ package:
                 if (Option copt = this._configOption) {
                     if (copt.isFlag(arg)) {
                         string value = get_front(_args);
-                        if (value.empty || maybe_opt(value))
-                            this.optionMissingArgument(opt);
-                        this.emit("option:" ~ copt.name, value);
-                        _args.popFront;
+                        string[] tmps = [];
+                        while (value.length && !maybe_opt(value)) {
+                            tmps ~= value;
+                            popFront(_args);
+                            value = get_front(_args);
+                        }
+                        auto ptr = copt.name in variadic_val_map;
+                        if (ptr)
+                            *ptr ~= tmps;
+                        else
+                            variadic_val_map[copt.name] = tmps;
                         continue;
                     }
                 }
@@ -1437,14 +1450,25 @@ package:
                     }
                     continue;
                 }
+                if (Option copt = this._configOption) {
+                    if (copt.isFlag("-" ~ arg[1])) {
+                        string name = copt.name;
+                        auto ptr = name in variadic_val_map;
+                        if (ptr)
+                            *ptr ~= arg[2 .. $];
+                        else
+                            variadic_val_map[name] = [arg[2 .. $]];
+                        continue;
+                    }
+                }
             }
 
             auto cp = matchFirst(arg, PTN_LONGASSIGN);
             if (cp.length) {
                 Option opt = _findOption(cp[1]);
                 string value = cp[2];
-                string name = opt.name;
                 if (opt) {
+                    string name = opt.name;
                     if (opt.isRequired || opt.isOptional) {
                         bool is_variadic = opt.variadic;
                         if (!is_variadic)
@@ -1463,6 +1487,17 @@ package:
                             "invalid value: `" ~ value ~ "` for bool option " ~ opt
                                 .flags);
                     continue;
+                }
+                if (Option copt = this._configOption) {
+                    if (copt.isFlag(cp[1])) {
+                        name = copt.name;
+                        auto ptr = name in variadic_val_map;
+                        if (ptr)
+                            *ptr ~= value;
+                        else
+                            variadic_val_map[name] = [value];
+                        continue;
+                    }
                 }
             }
 
@@ -1719,12 +1754,11 @@ package:
     void parseOptionsConfig() {
         alias Value = const(JSONValue)*;
         if (this._configOption) {
-            Value j_config = _processConfigFile(this.configEnvKey);
-            this.jconfig = j_config ? j_config : this.jconfig;
+            Value[] j_config = _processConfigFile();
+            this.jconfig ~= j_config;
+            this.jconfig = this.jconfig.uniq.array;
         }
-        if (this.jconfig) {
-            parseConfigOptionsImpl(this.jconfig);
-        }
+        this.jconfig.each!((jconfig) { parseConfigOptionsImpl(jconfig); });
     }
 
 public:
@@ -1767,25 +1801,21 @@ public:
         auto vopt = createOption(flags, desc);
         if (auto help_opt = this._helpOption) {
             if (vopt.matchFlag(help_opt))
-                this.error(format!"Cannot add option '%s'
-                    due to confliction help option `%s`"(vopt.flags, help_opt.flags));
+                this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(vopt.flags, help_opt
+                        .flags));
         }
-        else if (this._addImplicitHelpOption && (vopt.shortFlag == "-h" || vopt
-                .longFlag == "--help")) {
-            this.error(format!"Cannot add option '%s'
-                    due to confliction help option `%s`"(vopt.flags, "-h, --help"));
+        else if (this._addImplicitHelpOption && (vopt.shortFlag == "-h" || vopt.longFlag == "--help")) {
+            this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(vopt.flags, "-h, --help"));
         }
         if (auto config_opt = this._configOption) {
             if (vopt.matchFlag(config_opt))
-                this.error(format!"Cannot add option '%s'
-                    due to confliction config option `%s`"(vopt.flags, config_opt.flags));
+                this.error(format!"Cannot add option '%s' due to confliction config option `%s`"(vopt.flags, config_opt
+                        .flags));
         }
         this._versionOption = vopt;
-        string vname = vopt
-            .name;
+        string vname = vopt.name;
         this.on("option:" ~ vname, () {
-            this._outputConfiguration.writeOut(
-                this._version ~ "\n");
+            this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
         return this;
@@ -1806,8 +1836,7 @@ public:
         this._versionOption = opt;
         if (!action) {
             this.on("option:" ~ opt.name, () {
-                this._outputConfiguration.writeOut(
-                    this._version ~ "\n");
+                this._outputConfiguration.writeOut(this._version ~ "\n");
                 this._exitSuccessfully();
             });
         }
@@ -1824,25 +1853,17 @@ public:
         assert(!this._versionCommand);
         flags = flags == "" ? "version" : flags;
         desc = desc == "" ? "output the version number" : desc;
-        Command cmd = createCommand(
-            flags).description(desc);
+        Command cmd = createCommand(flags).description(desc);
         cmd.setHelpOption(false);
         cmd.setHelpCommand(false);
         string vname = cmd._name;
-        if (
-            auto help_cmd = this
-            ._helpCommand) {
-            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd
-                ._name;
-            auto none = help_cmd_name_arr.find!(
-                name => vname == name)
-                .empty;
+        if (auto help_cmd = this._helpCommand) {
+            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
+            auto none = help_cmd_name_arr.find!(name => vname == name).empty;
             if (!none) {
-                string help_cmd_names = help_cmd_name_arr
-                    .join("|");
+                string help_cmd_names = help_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of help command `%s`"(
+                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
                         vname, help_cmd_names));
             }
         }
@@ -1850,19 +1871,16 @@ public:
             string help_cmd_names = "help";
             if (vname == help_cmd_names) {
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of help command `%s`"(
+                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
                         vname, help_cmd_names));
             }
         }
         this.on("command:" ~ vname, () {
-            this._outputConfiguration.writeOut(
-                this._version ~ "\n");
+            this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         });
         ActionCallback fn = () {
-            this._outputConfiguration.writeOut(
-                this._version ~ "\n");
+            this._outputConfiguration.writeOut(this._version ~ "\n");
             this._exitSuccessfully();
         };
         cmd.parent = this;
@@ -1880,31 +1898,20 @@ public:
     Self addVersionCommand(Command cmd) {
         assert(!this._versionCommand);
         string vname = cmd._name;
-        if (
-            auto help_cmd = this
-            ._helpCommand) {
-            auto help_cmd_name_arr = help_cmd
-                ._aliasNames ~ help_cmd
-                ._name;
-            auto none = help_cmd_name_arr.find!(
-                name => vname == name)
-                .empty;
+        if (auto help_cmd = this._helpCommand) {
+            auto help_cmd_name_arr = help_cmd._aliasNames ~ help_cmd._name;
+            auto none = help_cmd_name_arr.find!(name => vname == name).empty;
             if (!none) {
-                string help_cmd_names = help_cmd_name_arr
-                    .join("|");
+                string help_cmd_names = help_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of help command `%s`"(
+                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
                         vname, help_cmd_names));
             }
         }
         else if (this._addImplicitHelpCommand) {
             string help_cmd_names = "help";
-            if (
-                vname == help_cmd_names) {
-                this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of help command `%s`"(
+            if (vname == help_cmd_names) {
+                this.error(format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
                         vname, help_cmd_names));
             }
         }
@@ -1913,44 +1920,29 @@ public:
         return this;
     }
 
-    /// set the config option, if `flags` not defined, then config option's flags is `-C, --config <config-path>`;
-    /// if `desc not defined, then description is by default;
-    /// if `envKey` not defined, then the `envKey` would be `${PROGRAM_NAME}_CONFIG_PATH`, which automatically store the path to config file
+    /// set the config option, if `flags` not defined, then config option's flags is `-C, --config <config-dirs...>`;
+    /// if `desc` not defined, then description is by default;
+    /// if `defaultDir` not defined, then the `defaultDir` would be `${CURRENT_WORKER_DIR}`, which automatically store the path to dir of config file
     /// Params:
     ///   flags = the flags of config option
     ///   desc = the description of config option
-    ///   envKey = the envKey of an env variable that store the destination of config file
-    /// Returns: 
-    Self setConfigOption(string flags = "", string desc = "", string envKey = "") {
+    ///   defaultDir = the built-in path to the dir of config file, which priority is higher than `${YOUR_PROGRAM_DIR}/{YOUR_PROGRAM_NAME}.config.json`
+    /// Returns: `Self` for chain call
+    Self setConfigOption(string flags = "", string desc = "", string defaultDir = "") {
         assert(!this._configOption);
-        flags = flags == "" ? "-C, --config <config-path>" : flags;
-        string exePath = thisExePath();
-        string exeDir = dirName(
-            exePath);
-        version (Posix) {
-            string base_name = baseName(
-                exePath);
-        }
-        else version (Windows)
-            string base_name = baseName(
-                exePath)[0 .. $ - 4];
+        flags = flags == "" ? "-C, --config <config-dirs...>" : flags;
+        defaultDir = defaultDir == "" ? thisExePath.dirName : defaultDir;
+        string cwd = getcwd();
         desc = desc == "" ?
-            format("define the path to the config file," ~
+            format("define the directories of the config file," ~
                     "if not specified, the config file name would be" ~
-                    " `%s.config.json` and it is on the dir where `%s` situates on",
-                this._name, base_name) : desc;
-        string tmp = ("xx-auto-" ~ this.name ~ "-config-path")
-            .replaceAll(regex(`-`), "_")
-            .toUpper;
-        envKey = envKey.empty ? tmp : envKey;
-        environment[envKey] = buildPath(
-            exeDir, format("%s.config.json", this
-                ._name));
-        this.configEnvKey = envKey;
+                    " `%s.config.json` and it is on the dir `%s` and current woker dir `%s`",
+                this._name, defaultDir, cwd) : desc;
+        this._configPaths ~= defaultDir;
+        this._configPaths ~= cwd;
+        this._configPaths = this._configPaths.uniq.array;
         auto copt = createOption!string(flags, desc);
-        if (
-            auto help_opt = this
-            ._helpOption) {
+        if (auto help_opt = this._helpOption) {
             if (
                 copt.matchFlag(
                     help_opt))
@@ -1976,96 +1968,61 @@ public:
         this._configOption = copt;
         string cname = copt.name;
         this.on("option:" ~ cname, (
-                string configPath) {
-            string path = environment[this
-                    .configEnvKey];
-            string origin_path = dirName(
-                path);
-            string base = baseName(
-                path);
-            string p1 = buildPath(origin_path, configPath);
-            string p2 = buildPath(
-                configPath);
-            if (exists(p1)) {
-                environment[this
-                        .configEnvKey] = buildPath(p1, base);
-            }
-            else if (exists(p2)) {
-                environment[this
-                        .configEnvKey] = buildPath(p2, base);
-            }
-            else
-                this.parsingError(format(
-                    "invalid path: %s\n\v%s", p1, p2));
+                string[] configPaths) {
+            string current_dir = getcwd();
+            configPaths.each!((path) {
+                auto rpath = buildPath(current_dir, path);
+                auto npath = exists(rpath) ? rpath : path;
+                if (!exists(npath)) {
+                    parsingError(format!"invalid path `%s` or `%s`"(rpath, path));
+                }
+                this._configPaths ~= npath;
+            });
+            this._configPaths = this._configPaths.uniq.array;
         });
         return this;
     }
 
-    package void parseConfigOptionsImpl(
-        const(JSONValue)* config) {
+    package void parseConfigOptionsImpl(const(JSONValue)* config) {
         alias Value = const(JSONValue)*;
-        if (this.subCommand && !this.subCommand
-            ._execHandler) {
-            string sub_name = this.subCommand
-                ._name;
+        if (this.subCommand && !this.subCommand._execHandler) {
+            string sub_name = this.subCommand._name;
             Value sub_config = sub_name in *config;
-            this.subCommand.jconfig = sub_config;
+            if (sub_config && this.subCommand.jconfig.count(sub_config) == 0)
+                this.subCommand.jconfig ~= sub_config;
         }
-        if (this.subCommand && this.subCommand
-            .immediately)
+        if (this.subCommand && this.subCommand.immediately)
             return;
         Value[string] copts;
         Value[] cargs;
-        if (
-            Value ptr = "arguments" in *config) {
-            if (
-                ptr.type != JSONType
-                .ARRAY) {
+        if (Value ptr = "arguments" in *config) {
+            if (ptr.type != JSONType.ARRAY) {
                 this.parsingError("the `arguments`'s value must be array!");
             }
-            ptr.array.each!(
-                (
-                    const ref JSONValue ele) {
-                if (ele.type == JSONType.NULL || ele
-                .type == JSONType
-                .OBJECT) {
-                    this.parsingError(
-                        "the `argument`'s element value cannot be object or null!");
+            ptr.array.each!((const ref JSONValue ele) {
+                if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
+                    this.parsingError("the `argument`'s element value cannot be object or null!");
                 }
                 cargs ~= &ele;
             });
         }
-        if (
-            Value ptr = "options" in *config) {
-            if (
-                ptr.type != JSONType
-                .OBJECT) {
-                this.parsingError(
-                    "the `options`'s value must be object!");
+        if (Value ptr = "options" in *config) {
+            if (ptr.type != JSONType.OBJECT) {
+                this.parsingError("the `options`'s value must be object!");
             }
             foreach (string key, const ref JSONValue ele; ptr.object) {
-                if (ele.type == JSONType.NULL || ele.type == JSONType
-                    .OBJECT) {
+                if (ele.type == JSONType.NULL || ele.type == JSONType.OBJECT) {
                     this.parsingError("the `option`'s value cannot be object or null!");
                 }
-                if (
-                    ele.type == JSONType
-                    .ARRAY) {
-                    if (
-                        ele.array.length < 1)
-                        this.parsingError("if the `option`'s value is array,
-                                then its length cannot be 0");
-                    bool all_int = ele.array.all!((ref e) => e.type == JSONType
-                            .INTEGER);
-                    bool all_double = ele.array
-                        .all!((ref e) => e.type == JSONType
-                                .FLOAT);
-                    bool all_string = ele.array
-                        .all!((ref e) => e.type == JSONType
-                                .STRING);
+                if (ele.type == JSONType.ARRAY) {
+                    if (ele.array.length < 1)
+                        this.parsingError(
+                            "if the `option`'s value is array, then its length cannot be 0");
+                    bool all_int = ele.array.all!((ref e) => e.type == JSONType.INTEGER);
+                    bool all_double = ele.array.all!((ref e) => e.type == JSONType.FLOAT);
+                    bool all_string = ele.array.all!((ref e) => e.type == JSONType.STRING);
                     if (!(all_int || all_double || all_string)) {
-                        this.parsingError("if the `option`'s value is array,
-                                then its element type must all be int or double or string the same");
+                        this.parsingError("if the `option`'s value is array, then its element type must all be int or double or string the same");
                     }
                 }
                 copts[key] = &ele;
@@ -2073,52 +2030,35 @@ public:
         }
         auto get_front = () => cargs.empty ? null : cargs.front;
         auto test_regulra = () {
-            bool all_int = cargs.all!(
-                (ref e) => e.type == JSONType
-                    .INTEGER);
-            bool all_double = cargs.all!(
-                (ref e) => e.type == JSONType
-                    .FLOAT);
-            bool all_string = cargs.all!(
-                (ref e) => e.type == JSONType
-                    .STRING);
+            bool all_int = cargs.all!((ref e) => e.type == JSONType.INTEGER);
+            bool all_double = cargs.all!((ref e) => e.type == JSONType.FLOAT);
+            bool all_string = cargs.all!((ref e) => e.type == JSONType.STRING);
             if (!(all_int || all_double || all_string)) {
-                this
-                    .parsingError(
-                        "the variadic `arguments`'s element type must all be int or double or string the same");
+                this.parsingError(
+                    "the variadic `arguments`'s element type must all be int or double or string the same");
             }
         };
-        auto assign_arg_arr = (
-            Argument arg) {
+        auto assign_arg_arr = (Argument arg) {
             test_regulra();
             auto tmp = cargs[0];
             switch (tmp.type) {
             case JSONType.INTEGER:
-                arg.configVal(cargs.map!(
-                        (ref ele) => cast(
-                        int) ele
-                        .get!int).array);
+                arg.configVal(cargs.map!((ref ele) => cast(int) ele.get!int).array);
                 break;
             case JSONType.FLOAT:
-                arg.configVal(cargs.map!(
-                        (ref ele) => cast(double) ele.get!double)
-                        .array);
+                arg.configVal(cargs.map!((ref ele) => cast(double) ele.get!double).array);
                 break;
             case JSONType.STRING:
-                arg.configVal(cargs.map!(
-                        (ref ele) => cast(string) ele.get!string)
-                        .array);
+                arg.configVal(cargs.map!((ref ele) => cast(string) ele.get!string).array);
                 break;
             default:
                 break;
             }
         };
         foreach (Argument argument; this._arguments) {
-            auto is_v = argument
-                .variadic;
+            auto is_v = argument.variadic;
             if (!is_v) {
-                if (
-                    Value value = get_front()) {
+                if (Value value = get_front()) {
                     mixin AssignOptOrArg!(argument, value);
                     cargs.popFront();
                 }
@@ -2127,15 +2067,13 @@ public:
             }
             else {
                 if (cargs.length) {
-                    assign_arg_arr(
-                        argument);
+                    assign_arg_arr(argument);
                     break;
                 }
             }
         }
         foreach (string key, Value value; copts) {
-            Option opt = _findOption(
-                key);
+            Option opt = _findOption(key);
             if (opt) {
                 mixin AssignOptOrArg!(opt, value);
             }
@@ -2146,17 +2084,11 @@ public:
     }
 
     private mixin template AssignOptOrArg(alias target, alias src)
-            if (
-                is(
-                typeof(src) == const(
-                JSONValue)*)) {
-        static if (
-            is(typeof(
-                target) == Argument)) {
+            if (is(typeof(src) == const(JSONValue)*)) {
+        static if (is(typeof(target) == Argument)) {
             Argument arg = target;
         }
-        else static if (
-            is(typeof(target) == Option)) {
+        else static if (is(typeof(target) == Option)) {
             Option arg = target;
         }
         else {
@@ -2164,29 +2096,18 @@ public:
         }
         const(JSONValue)* val = src;
 
-        static if (
-            is(
-                typeof(target) == Option)) {
+        static if (is(typeof(target) == Option)) {
             auto assign_arr = () {
-                auto tmp = (
-                    val.array)[0];
+                auto tmp = (val.array)[0];
                 switch (tmp.type) {
                 case JSONType.INTEGER:
-                    arg.configVal(val.array.map!(
-                            (ref ele) => cast(int) ele.get!int)
-                            .array);
+                    arg.configVal(val.array.map!((ref ele) => cast(int) ele.get!int).array);
                     break;
                 case JSONType.FLOAT:
-                    arg.configVal(
-                        val.array.map!((ref ele) => cast(
-                            double) ele.get!double)
-                            .array);
+                    arg.configVal(val.array.map!((ref ele) => cast(double) ele.get!double).array);
                     break;
                 case JSONType.STRING:
-                    arg.configVal(
-                        val.array.map!((ref ele) => cast(
-                            string) ele.get!string)
-                            .array);
+                    arg.configVal(val.array.map!((ref ele) => cast(string) ele.get!string).array);
                     break;
                 default:
                     break;
@@ -2197,29 +2118,18 @@ public:
         auto assign = () {
             switch (val.type) {
             case JSONType.INTEGER:
-                arg.configVal(
-                    cast(int) val
-                        .get!int);
+                arg.configVal(cast(int) val.get!int);
                 break;
             case JSONType.FLOAT:
-                arg.configVal(
-                    cast(double) val
-                        .get!double);
+                arg.configVal(cast(double) val.get!double);
                 break;
             case JSONType.STRING:
-                arg.configVal(
-                    cast(string) val
-                        .get!string);
+                arg.configVal(cast(string) val.get!string);
                 break;
             case JSONType.FALSE, JSONType.TRUE:
-                arg.configVal(
-                    cast(bool) val
-                        .get!bool);
+                arg.configVal(cast(bool) val.get!bool);
                 break;
-                static if (
-                    is(
-                        typeof(
-                        target) == Option)) {
+                static if (is(typeof(target) == Option)) {
             case JSONType.ARRAY:
                     assign_arr();
                     break;
@@ -2232,48 +2142,40 @@ public:
         auto _x_Inner_ff = assign();
     }
 
-    package JSONValue* _processConfigFile(
-        string envKey) const {
-        string path_to_config = environment[envKey];
-        if (path_to_config.length > 12 && path_to_config[$ - 12 .. $] == ".config.json"
-            && exists(
-                path_to_config)) {
-            try {
-                string raw = readText(
-                    path_to_config);
-                return new JSONValue(
-                    parseJSON(
-                        raw));
-            }
-            catch (Exception e) {
-                this.parsingError(
-                    e.msg);
+    package const(JSONValue)*[] _processConfigFile() const {
+        const(JSONValue)*[] tmp = [];
+        foreach (path; this._configPaths) {
+            string config_file = buildPath(path, format("%s.config.json", this._name));
+            if (config_file.length > 12 && config_file[$ - 12 .. $] == ".config.json"
+                && exists(config_file)) {
+                try {
+                    string raw = readText(config_file);
+                    auto rele = new JSONValue(parseJSON(raw));
+                    if (rele.type != JSONType.OBJECT) {
+                        parsingError(
+                            format!"the json must be object in json file `%s`"(config_file));
+                    }
+                    tmp ~= rele;
+                }
+                catch (Exception e) {
+                    this.parsingError(e.msg);
+                }
             }
         }
-        return null;
+        return tmp;
     }
 
     package void _helpCommandAction(in OptsWrap _, in ArgWrap hcommand) {
         if (hcommand.isValid) {
-            auto sub_cmd_name = hcommand
-                .get!string;
-            auto sub_cmd = this._findCommand(
-                sub_cmd_name);
-            auto vcmd = this
-                ._versionCommand;
-            sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd
-                ._name == sub_cmd_name ? vcmd : null;
-            if (!sub_cmd || sub_cmd
-                ._hidden)
-                this.parsingError(
-                    "can not find the sub command `" ~ sub_cmd_name ~ "`!");
-            if (
-                sub_cmd
-                ._execHandler) {
+            auto sub_cmd_name = hcommand.get!string;
+            auto sub_cmd = this._findCommand(sub_cmd_name);
+            auto vcmd = this._versionCommand;
+            sub_cmd = sub_cmd ? sub_cmd : vcmd && vcmd._name == sub_cmd_name ? vcmd : null;
+            if (!sub_cmd || sub_cmd._hidden)
+                this.parsingError("can not find the sub command `" ~ sub_cmd_name ~ "`!");
+            if (sub_cmd._execHandler) {
                 sub_cmd.execSubCommand([
-                    this
-                        ._externalCmdHelpFlagMap[sub_cmd
-                                ._name]
+                    this._externalCmdHelpFlagMap[sub_cmd._name]
                 ]);
             }
             sub_cmd.help();
@@ -2284,34 +2186,19 @@ public:
     /// set the help command
     Self setHelpCommand(string flags = "", string desc = "") {
         assert(!this._helpCommand);
-        bool has_sub_cmd = this
-            ._versionCommand !is null || !this._commands.find!(
-                cmd => !cmd
-                    ._hidden)
-            .empty;
+        bool has_sub_cmd = this._versionCommand !is null || !this._commands.find!(
+            cmd => !cmd._hidden).empty;
         flags = flags == "" ? has_sub_cmd ? "help [command]" : "help" : flags;
         desc = desc == "" ? "display help for command" : desc;
-        Command help_cmd = has_sub_cmd ? createCommand!(
-            string)(flags, desc) : createCommand(
-            flags, desc);
-        help_cmd.setHelpOption(
-            false);
-        help_cmd.setHelpCommand(
-            false);
-        string hname = help_cmd
-            ._name;
-        if (
-            auto verison_cmd = this
-            ._versionCommand) {
-            auto version_cmd_name_arr = verison_cmd
-                ._aliasNames ~ verison_cmd
-                ._name;
-            auto none = version_cmd_name_arr.find!(
-                name => hname == name)
-                .empty;
+        Command help_cmd = has_sub_cmd ? createCommand!(string)(flags, desc) : createCommand(flags, desc);
+        help_cmd.setHelpOption(false);
+        help_cmd.setHelpCommand(false);
+        string hname = help_cmd._name;
+        if (auto verison_cmd = this._versionCommand) {
+            auto version_cmd_name_arr = verison_cmd._aliasNames ~ verison_cmd._name;
+            auto none = version_cmd_name_arr.find!(name => hname == name).empty;
             if (!none) {
-                string version_cmd_names = version_cmd_name_arr
-                    .join("|");
+                string version_cmd_names = version_cmd_name_arr.join("|");
                 this.error(
                     format!"cannot add command `%s` as this command name cannot be same as
                         the name of version command `%s`"(
@@ -2321,8 +2208,7 @@ public:
         help_cmd.parent = this;
         help_cmd.action(&this._helpCommandAction, true);
         this._helpCommand = help_cmd;
-        return setHelpCommand(
-            true);
+        return setHelpCommand(true);
     }
 
     /// enable or disable the help command
@@ -2334,20 +2220,14 @@ public:
     /// add the help command
     Self addHelpCommand(Command cmd) {
         assert(!this._helpCommand);
-        string[] hnames = cmd._aliasNames ~ cmd
-            ._name;
-        if (
-            auto verison_cmd = this
-            ._versionCommand) {
-            auto version_cmd_name_arr = verison_cmd
-                ._aliasNames ~ verison_cmd
-                ._name;
-            auto none = version_cmd_name_arr.find!(
-                (name) { return !hnames.find!(h => h == name)
-                    .empty; }).empty;
+        string[] hnames = cmd._aliasNames ~ cmd._name;
+        if (auto verison_cmd = this._versionCommand) {
+            auto version_cmd_name_arr = verison_cmd._aliasNames ~ verison_cmd._name;
+            auto none = version_cmd_name_arr.find!((name) {
+                return !hnames.find!(h => h == name).empty;
+            }).empty;
             if (!none) {
-                string version_cmd_names = version_cmd_name_arr
-                    .join("|");
+                string version_cmd_names = version_cmd_name_arr.join("|");
                 this.error(
                     format!"cannot add command `%s` as this command name cannot be same as
                         the name of version command `%s`"(
@@ -2357,8 +2237,7 @@ public:
         cmd.parent = this;
         cmd.action(&this._helpCommandAction, true);
         this._helpCommand = cmd;
-        return setHelpCommand(
-            true);
+        return setHelpCommand(true);
     }
 
     /// add the help command
@@ -2367,16 +2246,11 @@ public:
     }
 
     package Command _getHelpCommand() {
-        if (
-            !this
-            ._addImplicitHelpCommand)
+        if (!this._addImplicitHelpCommand)
             return null;
-        if (
-            !this
-            ._helpCommand)
+        if (!this._helpCommand)
             this.setHelpCommand();
-        return this
-            ._helpCommand;
+        return this._helpCommand;
     }
 
     /// set the help option
@@ -2385,30 +2259,21 @@ public:
         flags = flags == "" ? "-h, --help" : flags;
         desc = desc == "" ? "display help for command" : desc;
         auto hopt = createOption(flags, desc);
-        if (
-            auto config_opt = this
-            ._configOption) {
-            if (
-                hopt.matchFlag(
-                    config_opt))
+        if (auto config_opt = this._configOption) {
+            if (hopt.matchFlag(config_opt))
                 this.error(
                     format!"Cannot add option '%s'
                     due to confliction config option `%s`"(hopt.flags, config_opt.flags));
         }
-        if (
-            auto version_opt = this
-            ._versionOption) {
-            if (
-                hopt.matchFlag(
-                    version_opt))
+        if (auto version_opt = this._versionOption) {
+            if (hopt.matchFlag(version_opt))
                 this.error(
                     format!"Cannot add option '%s'
                     due to confliction version option `%s`"(hopt.flags, version_opt.flags));
         }
         this._helpOption = hopt;
         this.on("option:" ~ hopt.name, () { this.help(); });
-        return setHelpOption(
-            true);
+        return setHelpOption(true);
     }
 
     /// enable the help option or not
@@ -2422,15 +2287,13 @@ public:
         assert(!this._helpOption);
         this._helpOption = option;
         if (!action)
-            this.on(
-                "option:" ~ option.name, () { this.help(); });
+            this.on("option:" ~ option.name, () { this.help(); });
         else
             this.on("option:" ~ option.name, () {
                 action();
                 this._exitSuccessfully();
             });
-        return setHelpOption(
-            true);
+        return setHelpOption(true);
     }
 
     /// add the help option
@@ -2446,37 +2309,24 @@ public:
     }
 
     package Option _getHelpOption() {
-        if (
-            !this
-            ._addImplicitHelpCommand)
+        if (!this._addImplicitHelpCommand)
             return null;
-        if (
-            !this
-            ._helpOption)
+        if (!this._helpOption)
             this.setHelpOption();
-        return this
-            ._helpOption;
+        return this._helpOption;
     }
 
-    package void outputHelp(
-        bool isErrorMode = false) const {
+    package void outputHelp(bool isErrorMode = false) const {
         auto writer = isErrorMode ?
-            this._outputConfiguration.writeErr : this._outputConfiguration
-                .writeOut;
-        auto ancestors = cast(
-            Command[]) _getCommandAndAncestors();
+            this._outputConfiguration.writeErr : this._outputConfiguration.writeOut;
+        auto ancestors = cast(Command[]) _getCommandAndAncestors();
         ancestors.reverse.each!(
-            cmd => cmd.emit(
-                "beforeAllHelp", isErrorMode)
+            cmd => cmd.emit("beforeAllHelp", isErrorMode)
         );
         this.emit("beforeHelp", isErrorMode);
-        writer(
-            helpInfo(
-                isErrorMode) ~ "\n");
+        writer(helpInfo(isErrorMode) ~ "\n");
         this.emit("afterHelp", isErrorMode);
-        ancestors.each!(
-            cmd => cmd.emit(
-                "afterAllHelp", isErrorMode)
+        ancestors.each!(cmd => cmd.emit("afterAllHelp", isErrorMode)
         );
     }
 
@@ -2484,29 +2334,20 @@ public:
     /// Params:
     ///   isErrorMode = turn on the error mode, which would make the info output to this command's error output
     /// Returns: the string of help info
-    string helpInfo(
-        bool isErrorMode = false) const {
-        auto helper = cast(
-            Help) this
-            ._helpConfiguration;
+    string helpInfo(bool isErrorMode = false) const {
+        auto helper = cast(Help) this._helpConfiguration;
         helper.helpWidth = isErrorMode ?
-            this._outputConfiguration
-                .getErrHelpWidth() : this._outputConfiguration
-                .getOutHelpWidth();
-        return helper.formatHelp(
-            this);
+            this._outputConfiguration.getErrHelpWidth() : this._outputConfiguration.getOutHelpWidth();
+        return helper.formatHelp(this);
     }
 
     /// invoke the help if the help support is not disabled
     /// Params:
     ///   isErrorMode = turn on the error mode, which would make the info output to this command's error output
-    void help(
-        bool isErrorMode = false) {
-        this.outputHelp(
-            isErrorMode);
+    void help(bool isErrorMode = false) {
+        this.outputHelp(isErrorMode);
         if (isErrorMode)
-            this._exitErr(
-                "(outputHelp)", "command.help");
+            this._exitErr("(outputHelp)", "command.help");
         this._exit(0);
     }
 
@@ -2516,53 +2357,40 @@ public:
     ///   text = the appendent hlp text
     /// Returns: `Self` for chain call
     Self addHelpText(AddHelpPos pos, string text) {
-        assert(this._addImplicitHelpCommand || this
-                ._addImplicitHelpOption);
+        assert(this._addImplicitHelpCommand || this._addImplicitHelpOption);
         string help_event = pos ~ "Help";
-        this.on(help_event, (
-                bool isErrMode) {
+        this.on(help_event, (bool isErrMode) {
             if (text.length) {
                 auto writer = isErrMode ?
-                    this._outputConfiguration
-                        .writeErr : this
-                        ._outputConfiguration
-                        .writeOut;
-                writer(
-                    text ~ "\n");
+                    this._outputConfiguration.writeErr : this._outputConfiguration.writeOut;
+                writer(text ~ "\n");
             }
         });
         return this;
     }
 
     /// whether sort sub commands when invoke help, default: false
-    Self sortSubCommands(
-        bool enable = true) {
+    Self sortSubCommands(bool enable = true) {
         this._helpConfiguration.sortSubCommands = enable;
         return this;
     }
 
     /// whether sort sub options when invoke help, default: false
-    Self sortOptions(
-        bool enable = true) {
+    Self sortOptions(bool enable = true) {
         this._helpConfiguration.sortOptions = enable;
         return this;
     }
 
     /// whether show the global options when invoke help, default: false
-    Self showGlobalOptions(
-        bool enable = true) {
+    Self showGlobalOptions(bool enable = true) {
         this._helpConfiguration.showGlobalOptions = enable;
         return this;
     }
 
-    package void _outputHelpIfRequested(
-        string[] flags) {
+    package void _outputHelpIfRequested(string[] flags) {
         auto help_opt = this._getHelpOption();
-        bool help_requested = help_opt !is null &&
-            !flags.find!(
-                flag => help_opt.isFlag(
-                    flag))
-                .empty;
+        bool help_requested = help_opt !is null && !flags.find!(
+            flag => help_opt.isFlag(flag)).empty;
         if (help_requested) {
             this.outputHelp();
             this._exitSuccessfully();
@@ -2576,88 +2404,55 @@ public:
         mixin SetActionFn!Action;
     }
 
-    private mixin template SetActionFn(
-        Fn) {
+    private mixin template SetActionFn(Fn) {
         public Self action(Fn fn, bool immediately = false) {
             this.immediately = immediately;
-            enum len = Parameters!(
-                    fn)
-                    .length;
+            enum len = Parameters!(fn).length;
             auto listener = () {
-                static if (
-                    len == 0) {
+                static if (len == 0) {
                     fn();
                 }
                 else {
-                    this.opts = this.opts is null ? this
-                        ._options
-                        .filter!(
-                            opt => opt
-                                .settled)
-                        .map!(opt => tuple(
-                                opt.name, opt
-                                .get))
-                        .assocArray : this
-                        .opts;
-                    this.args = this.args.empty ? this
-                        ._arguments
-                        .filter!(
-                            arg => arg
-                                .settled)
-                        .map!(
-                            arg => arg
-                                .get)
-                        .array : this
-                        .args;
-                    OptsWrap wopts = OptsWrap(
-                        this
-                            .opts);
-                    static if (
-                        len == 1) {
-                        fn(
-                            wopts);
+                    this.opts = this.opts is null ?
+                        this._options
+                            .filter!(opt => opt.settled)
+                            .map!(opt => tuple(opt.name, opt.get))
+                            .assocArray : this.opts;
+                    this.args = this.args.empty ?
+                        this._arguments
+                            .filter!(arg => arg.settled)
+                            .map!(arg => arg.get)
+                            .array : this.args;
+                    OptsWrap wopts = OptsWrap(this.opts);
+                    static if (len == 1) {
+                        fn(wopts);
                     }
                     else {
                         auto nlen = len - 1;
                         ArgWrap[] wargs;
-                        if (
-                            this.args.length >= nlen) {
-                            wargs = this.args[0 .. nlen].map!((
-                                    return a) => ArgWrap(
-                                    a))
-                                .array;
+                        if (this.args.length >= nlen) {
+                            wargs = this.args[0 .. nlen].map!((return a) => ArgWrap(a)).array;
                         }
                         else {
-                            wargs = this.args.map!(
-                                a => ArgWrap(a))
-                                .array;
-                            ulong less_num = nlen - this
-                                .args
-                                .length;
-                            foreach (
-                                _; 0 .. less_num) {
-                                wargs ~= ArgWrap(
-                                    null);
+                            wargs = this.args.map!(a => ArgWrap(a)).array;
+                            ulong less_num = nlen - this.args.length;
+                            foreach (_; 0 .. less_num) {
+                                wargs ~= ArgWrap(null);
                             }
                         }
-                        static if (
-                            len == 2) {
+                        static if (len == 2) {
                             fn(wopts, wargs[0]);
                         }
-                        static if (
-                            len == 3) {
+                        static if (len == 3) {
                             fn(wopts, wargs[0], wargs[1]);
                         }
-                        static if (
-                            len == 4) {
+                        static if (len == 4) {
                             fn(wopts, wargs[0], wargs[1], wargs[2]);
                         }
-                        static if (
-                            len == 5) {
+                        static if (len == 5) {
                             fn(wopts, wargs[0], wargs[1], wargs[2], wargs[3]);
                         }
-                        static if (
-                            len == 6) {
+                        static if (len == 6) {
                             fn(wopts, wargs[0], wargs[1], wargs[2], wargs[3], wargs[4]);
                         }
                     }
@@ -2666,9 +2461,7 @@ public:
             };
             this._actionHandler = listener;
             this.on("action:" ~ this._name, () {
-                if (
-                    this
-                ._actionHandler)
+                if (this._actionHandler)
                     this._actionHandler();
             });
             return this;
@@ -2677,63 +2470,42 @@ public:
 
     /// get the options' value map wrap by `OptsWrap`. remember use it after parsing or at the action callabck
     inout(OptsWrap) getOpts() inout {
-        return inout OptsWrap(
-            this.opts);
+        return inout OptsWrap(this.opts);
     }
 
     /// get the array of arguments' value wrap by `ArgWrap`. remember use it after parsing or at the action callabck
     ArgWrap[] getArgs() const {
-        auto len = this._arguments
-            .length;
+        auto len = this._arguments.length;
         ArgWrap[] wargs;
-        if (
-            this.args.length >= len) {
-            wargs = this.args[0 .. len].map!(
-                (return a) => ArgWrap(
-                    a))
-                .array;
+        if (this.args.length >= len) {
+            wargs = this.args[0 .. len].map!((return a) => ArgWrap(a)).array;
         }
         else {
-            wargs = this.args.map!(a => ArgWrap(a))
-                .array;
-            ulong less_num = len - this.args
-                .length;
+            wargs = this.args.map!(a => ArgWrap(a)).array;
+            ulong less_num = len - this.args.length;
             foreach (_; 0 .. less_num) {
-                wargs ~= ArgWrap(
-                    null);
+                wargs ~= ArgWrap(null);
             }
         }
         return wargs;
     }
 
     /// set the alias of command
-    Self aliasName(
-        string aliasStr) {
+    Self aliasName(string aliasStr) {
         Command command = this;
-        if (this._commands.length != 0 && this
-            ._commands[$ - 1]
-            ._execHandler) {
+        if (this._commands.length != 0 && this._commands[$ - 1]._execHandler) {
             command = this._commands[$ - 1];
         }
-        if (
-            aliasStr == command
-            ._name)
+        if (aliasStr == command._name)
             this.error(format!"cannot add alias `%s` to command `%s` as they cannot be same"(
                     aliasStr, command
                     ._name
             ));
-        auto matchingCommand = this.parent ? this._findCommand(
-            aliasStr) : null;
-        if (
-            matchingCommand) {
-            auto exitCmdNames = [
-                matchingCommand.name()
-            ];
-            exitCmdNames ~= matchingCommand
-                .aliasNames;
-            auto namesStr = exitCmdNames
-                .join(
-                    "|");
+        auto matchingCommand = this.parent ? this._findCommand(aliasStr) : null;
+        if (matchingCommand) {
+            auto exitCmdNames = [matchingCommand.name()];
+            exitCmdNames ~= matchingCommand.aliasNames;
+            auto namesStr = exitCmdNames.join("|");
             this.error(
                 format!"cannot add alias %s to command %s as already have command %s"(
                     aliasStr, this.name, namesStr));
@@ -2744,20 +2516,15 @@ public:
 
     /// get the first alias of command
     string aliasName() const {
-        if (
-            this._aliasNames.length == 0) {
+        if (this._aliasNames.length == 0) {
             this.error("the num of alias names cannot be zero");
         }
-        return this
-            ._aliasNames[0];
+        return this._aliasNames[0];
     }
 
     /// set a sequence of aliases of command
-    Self aliasNames(
-        string[] aliasStrs) {
-        aliasStrs.each!(
-            str => this.aliasName(
-                str));
+    Self aliasNames(string[] aliasStrs) {
+        aliasStrs.each!(str => this.aliasName(str));
         return this;
     }
 
@@ -2766,168 +2533,127 @@ public:
         return this._aliasNames;
     }
 
-    inout(Argument) _findArgument(
-        string name) inout {
-        auto validate = (
-            inout Argument arg) { return name == arg
-            ._name; };
-        auto tmp = this._arguments
-            .find!validate;
+    inout(Argument) _findArgument(string name) inout {
+        auto validate = (inout Argument arg) { return name == arg._name; };
+        auto tmp = this._arguments.find!validate;
         return tmp.empty ? null : tmp[0];
     }
 
-    inout(Command) _findCommand(
-        string name) inout {
-        auto validate = (
-            inout Command cmd) {
-            auto result = cmd._name == name || cmd
-                ._aliasNames.any!(
-                    n => n == name);
+    inout(Command) _findCommand(string name) inout {
+        auto validate = (inout Command cmd) {
+            auto result = cmd._name == name || cmd._aliasNames.any!(n => n == name);
             return result;
         };
-        auto tmp = this._commands
-            .find!validate;
+        auto tmp = this._commands.find!validate;
         return tmp.empty ? null : tmp[0];
     }
 
-    inout(Option) _findOption(
-        string flag) inout {
-        auto tmp = this._options.find!(
-            opt => opt.isFlag(flag) || flag == opt
-                .name);
+    inout(Option) _findOption(string flag) inout {
+        auto tmp = this._options.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
     }
 
-    inout(NegateOption) _findNegateOption(
-        string flag) inout {
-        auto tmp = this._negates.find!(
-            opt => opt.isFlag(flag) || flag == opt
-                .name);
+    inout(NegateOption) _findNegateOption(string flag) inout {
+        auto tmp = this._negates.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
     }
 
     /// add argument for command
-    Self addArgument(
-        Argument argument) {
-        auto args = this
-            ._arguments;
+    Self addArgument(Argument argument) {
+        auto args = this._arguments;
         Argument prev_arg = args.length ? args[$ - 1] : null;
-        if (prev_arg && prev_arg
-            .variadic) {
+        if (prev_arg && prev_arg.variadic) {
             this.error(format!"cannot add argument `%s` after the variadic argument `%s`"(
                     argument._name, prev_arg
                     ._name
             ));
         }
-        if (prev_arg && prev_arg.isOptional && argument
-            .isRequired) {
+        if (prev_arg && prev_arg.isOptional && argument.isRequired) {
             this.error(format!"cannot add required argument `%s` after the optional argument `%s`"(
                     argument._name, prev_arg
                     ._name
             ));
         }
-        _registerArgument(
-            argument);
+        _registerArgument(argument);
         return this;
     }
 
     /// define the argument for command
-    Self argument(T)(string name, string desc = "") if (
-        isArgValueType!T) {
+    Self argument(T)(string name, string desc = "") if (isArgValueType!T) {
         auto arg = createArgument!T(name, desc);
-        this.addArgument(
-            arg);
+        this.addArgument(arg);
         return this;
     }
 
     /// define the argument with default value for command, used for no-variadic argument
-    Self argument(T)(string name, string desc, T val) if (
-        isBaseArgValueType!T) {
+    Self argument(T)(string name, string desc, T val) if (isBaseArgValueType!T) {
         auto arg = createArgument!T(name, desc);
         arg.defaultVal(val);
-        this.addArgument(
-            arg);
+        this.addArgument(arg);
         return this;
     }
 
     /// define the argument with default value for command, used for variadic argument
     Self argument(T)(string name, string desc, T val, T[] rest...)
-            if (isBaseArgValueType!T && !is(
-                T == bool)) {
+            if (isBaseArgValueType!T && !is(T == bool)) {
         auto arg = createArgument!T(name, desc);
         arg.defaultVal(val, rest);
-        this.addArgument(
-            arg);
+        this.addArgument(arg);
         return this;
     }
 
     /// define the argument with default value for command, used for variadic argument
     Self argument(T : U[], U)(string name, string desc, T defaultVal)
             if (!is(U == bool) && isBaseArgValueType!U) {
-        assert(
-            defaultVal.length >= 1);
+        assert(defaultVal.length >= 1);
         auto arg = createArgument!T(name, desc);
-        arg.defaultVal(
-            defaultVal);
-        this.addArgument(
-            arg);
+        arg.defaultVal(defaultVal);
+        this.addArgument(arg);
         return this;
     }
 
     /// define manly arguments for command
-    Self arguments(Args...)(
-        string names) {
-        enum args_num = Args
-                .length;
-        auto arg_strs = names.strip()
-            .split(" ");
-        assert(
-            args_num == arg_strs
-                .length);
+    Self arguments(Args...)(string names) {
+        enum args_num = Args.length;
+        auto arg_strs = names.strip().split(" ");
+        assert(args_num == arg_strs.length);
         static foreach (index, T; Args) {
-            this.argument!T(
-                arg_strs[index]);
+            this.argument!T(arg_strs[index]);
         }
         return this;
     }
 
     /// configure the output of command
-    Self configureOutput(
-        OutputConfiguration config) {
+    Self configureOutput(OutputConfiguration config) {
         this._outputConfiguration = config;
         return this;
     }
 
     /// get the output cofiguration of command
     inout(OutputConfiguration) configureOutput() inout {
-        return this
-            ._outputConfiguration;
+        return this._outputConfiguration;
     }
 
     /// whether show help info when parsing occur error, default: `true`
-    Self showHelpAfterError(
-        bool displayHelp = true) {
+    Self showHelpAfterError(bool displayHelp = true) {
         this._showHelpAfterError = displayHelp;
         return this;
     }
 
     /// whether show suggestion info when parsing occur error, default: `true`
-    Self showSuggestionAfterError(
-        bool displaySuggestion = true) {
+    Self showSuggestionAfterError(bool displaySuggestion = true) {
         this._showSuggestionAfterError = displaySuggestion;
         return this;
     }
 
     /// whether allow combine flag mode like `ls -al`, default: `true`
-    Self comineFlagAndOptionValue(
-        bool combine) {
+    Self comineFlagAndOptionValue(bool combine) {
         this._combineFlagAndOptionalValue = combine;
         return this;
     }
 
     /// whether allow excess argument, default: `true`
-    Self allowExcessArguments(
-        bool allow) {
+    Self allowExcessArguments(bool allow) {
         this._allowExcessArguments = allow;
         return this;
     }
@@ -2946,15 +2672,10 @@ public:
 
 package:
     void _exitErr(string msg, string code = "") const {
-        this._outputConfiguration.writeErr(
-            "ERROR:\t" ~ msg ~ " " ~ code ~ "\n");
-        if (
-            this
-            ._showHelpAfterError) {
-            this._outputConfiguration.writeErr(
-                "\n");
-            this.outputHelp(
-                true);
+        this._outputConfiguration.writeErr("ERROR:\t" ~ msg ~ " " ~ code ~ "\n");
+        if (this._showHelpAfterError) {
+            this._outputConfiguration.writeErr("\n");
+            this.outputHelp(true);
         }
         debug this.error();
         this._exit(1);
@@ -2990,10 +2711,7 @@ public:
     /// get the usage of command
     string usage() const {
         if (this._usage == "") {
-            string[] args_str = _arguments.map!(
-                arg => arg
-                    .readableArgName)
-                .array;
+            string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
             foreach (string key; this._argToOptNames) {
                 auto opt = _findOption(key);
                 args_str ~= "[(" ~ opt.name ~ ")]";
@@ -3025,10 +2743,7 @@ public:
             command = this._commands[$ - 1];
         }
         if (str == "") {
-            string[] args_str = _arguments.map!(
-                arg => arg
-                    .readableArgName)
-                .array;
+            string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
             foreach (string key; this._argToOptNames) {
                 auto opt = _findOption(key);
                 args_str ~= "[(" ~ opt.name ~ ")]";
@@ -3061,15 +2776,10 @@ public:
 }
 
 unittest {
-    auto cmd = new Command(
-        "cmdline");
-    assert(
-        cmd
-            ._allowExcessArguments);
-    cmd.description(
-        "this is test");
-    assert("description: this is test" == cmd
-            .description);
+    auto cmd = new Command("cmdline");
+    assert(cmd._allowExcessArguments);
+    cmd.description("this is test");
+    assert("description: this is test" == cmd.description);
     cmd.description("this is test", [
         "first": "1st",
         "second": "2nd"
@@ -3106,8 +2816,7 @@ unittest {
 // }
 
 /// create a command by name
-Command createCommand(
-    string name) {
+Command createCommand(string name) {
     return new Command(name);
 }
 
@@ -3117,12 +2826,10 @@ Command createCommand(Args...)(string nameAndArgs, string desc = "") {
     auto caputures = matchFirst(nameAndArgs, PTN_CMDNAMEANDARGS);
     string name = caputures[1], _args = caputures[2];
     assert(name != "");
-    auto cmd = createCommand(
-        name);
+    auto cmd = createCommand(name);
     cmd.description(desc);
     if (_args != "")
-        cmd.arguments!Args(
-            _args);
+        cmd.arguments!Args(_args);
     return cmd;
 }
 
@@ -3137,30 +2844,24 @@ class OutputConfiguration {
         str);
     int function() getOutHelpWidth = &_getOutHelpWidth;
     int function() getErrHelpWidth = &_getOutHelpWidth;
-    void outputError(
-        alias fn)(string str) {
+    void outputError(alias fn)(string str) {
         fn(str);
     }
 }
 
 version (Windows) {
     package int _getOutHelpWidth() {
-        HANDLE hConsole = GetStdHandle(
-            STD_OUTPUT_HANDLE);
+        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
         CONSOLE_SCREEN_BUFFER_INFO csbi;
         GetConsoleScreenBufferInfo(hConsole, &csbi);
-        return csbi.srWindow.Right - csbi
-            .srWindow.Left + 1;
+        return csbi.srWindow.Right - csbi.srWindow.Left + 1;
     }
 }
 else version (Posix) {
     package int _getOutHelpWidth() {
-        Tuple!(int, string) result = executeShell(
-            "stty size");
-        string tmp = result[1]
-            .strip;
-        return tmp.split(
-            " ")[1].to!int;
+        Tuple!(int, string) result = executeShell("stty size");
+        string tmp = result[1].strip;
+        return tmp.split(" ")[1].to!int;
     }
 }
 
@@ -3169,20 +2870,16 @@ struct OptsWrap {
     private OptionVariant[string] innerValue;
 
     /// enable getting option value wrapped by `ArgWrap` by name using call form
-    ArgWrap opCall(
-        string member) const {
+    ArgWrap opCall(string member) const {
         auto ptr = member in innerValue;
         if (ptr) {
-            return ArgWrap(
-                *ptr);
+            return ArgWrap(*ptr);
         }
         else
-            return ArgWrap(
-                null);
+            return ArgWrap(null);
     }
 
-    package this(
-        inout OptionVariant[string] v) inout {
+    package this(inout OptionVariant[string] v) inout {
         innerValue = v;
     }
 }
@@ -3191,8 +2888,7 @@ struct OptsWrap {
 struct ArgWrap {
     private ArgNullable innerValue;
 
-    package this(
-        in ArgVariant value) {
+    package this(in ArgVariant value) {
         this.innerValue = value;
     }
 
@@ -3203,8 +2899,7 @@ struct ArgWrap {
     /// test wheter the inner value is valid
     @property
     bool isValid() inout {
-        return !innerValue
-            .isNull;
+        return !innerValue.isNull;
     }
 
     /// enable implicitly convert to `bool` type representing `this.isValid`
@@ -3213,35 +2908,26 @@ struct ArgWrap {
     /// get the innner type, remember use it after test whether it is valid
     T get(T)() const
     if (isArgValueType!T) {
-        bool is_type = testType!T(
-            this.innerValue);
+        bool is_type = testType!T(this.innerValue);
         if (!is_type) {
-            throw new CMDLineError(
-                "the inner type is not " ~ T
-                    .stringof);
+            throw new CMDLineError("the inner type is not " ~ T.stringof);
         }
-        return cast(T) this.innerValue
-            .get!T;
+        return cast(T) this.innerValue.get!T;
     }
 
     /// test whether the type is the innner vlalue type
     bool verifyType(T)() const {
-        return testType!T(
-            this.innerValue);
+        return testType!T(this.innerValue);
     }
 
     /// enable the assign oparator with innner type that allow by `ArgWrap`
-    auto opAssign(T)(T value) if (isArgValueType!T || is(
-            T == typeof(
-            null))) {
+    auto opAssign(T)(T value) if (isArgValueType!T || is(T == typeof(null))) {
         this.innerValue = value;
         return this;
     }
 
     /// enbale the explicity cast that can get the inner value
-    T opCast(T)() const
-    if (
-        isArgValueType!T) {
+    T opCast(T)() const if (isArgValueType!T) {
         return this.get!T;
     }
 }

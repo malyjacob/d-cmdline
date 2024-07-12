@@ -30,7 +30,9 @@
                 "\"$DUB\" build -c implies",
                 "\"$DUB\" build -c preset",
                 "\"$DUB\" build -c optx",
-                "\"$DUB\" build -c inject"
+                "\"$DUB\" build -c inject",
+                "\"$DUB\" build -c config",
+                "\"$DUB\" build -c varmerge"
             ]
         },
         {
@@ -50,7 +52,9 @@
                 "\"$DUB\" build -c implies -b release",
                 "\"$DUB\" build -c preset -b release",
                 "\"$DUB\" build -c optx -b release",
-                "\"$DUB\" build -c inject -b release"
+                "\"$DUB\" build -c inject -b release",
+                "\"$DUB\" build -c config -b release",
+                "\"$DUB\" build -c varmerge -b release"
             ]
         },
         {
