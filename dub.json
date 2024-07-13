@@ -19,13 +19,19 @@
 	"sourcePaths": [
 		"source"
 	],
-	"dflags": ["-preview=in"],
+	"dflags": [
+		"-preview=in"
+	],
 	"buildTypes": {
 		"doc": {
-			"dflags": ["-Dddoc"]
+			"dflags": [
+				"-Dddoc"
+			]
 		},
-        itf: {
-            dflags: [-Hd=include]
-        }
+		"itf": {
+			"dflags": [
+				"-Hd=include"
+			]
+		}
 	}
 }
