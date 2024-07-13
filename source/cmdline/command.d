@@ -1444,9 +1444,23 @@ package:
                         _args.insertInPlace(0, "-" ~ arg[2 .. $]);
                     }
                     else {
-                        this.parsingError(
-                            "invalid value: `" ~ arg[2 .. $] ~ "` for bool option " ~ opt
-                                .flags);
+                        parsingError(format!"invalid value: `%s` for bool option `%s`"(
+                            arg[2 .. $],
+                            opt.flags
+                        ));
+                    }
+                    continue;
+                }
+                if (NegateOption nopt = _findNegateOption("-" ~ arg[1])) {
+                    if (_combineFlagAndOptionalValue) {
+                        this.emit("negate:" ~ nopt.name);
+                        _args.insertInPlace(0, "-" ~ arg[2 .. $]);
+                    }
+                    else {
+                        parsingError(format!"invalid value: `%s` for negate option `%s`"(
+                            arg[2 .. $],
+                            nopt.flags
+                        ));
                     }
                     continue;
                 }
@@ -1518,7 +1532,11 @@ package:
         }
         if (variadic_val_map) {
             foreach (key, ref value; variadic_val_map)
-                this.emit("option:" ~ key, value);
+                if (this._configOption && this._configOption.name == key) {
+                    this.emit("option:" ~ key, value.reverse);
+                }
+                else
+                    this.emit("option:" ~ key, value);
         }
         variadic_val_map = null;
         return tuple(operands, unknowns);
