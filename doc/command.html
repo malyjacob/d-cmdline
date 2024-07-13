@@ -417,6 +417,10 @@
         white-space: pre-wrap;
       }
 
+      .ddoc .code_lines pre {
+        display: contents;
+      }
+
       .ddoc .code_lines li:only-of-type::before {
         color: rgba(255, 255, 255, 1);
         content: " ";
@@ -1009,6 +1013,83 @@ if you define its action callback, this callback would be called when parsing.
   <div class="ddoc_summary">
   <p class="para">
     get the help configuration
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.argToOpt" id="Command.argToOpt"><code class="code">argToOpt</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.argToOpt"></span>Self <code class="code">argToOpt</code>(string <code class="code">optName</code>, string[] <code class="code">rest</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    register an option that can be as the argument of command line.
+remember that it is positional sensitive and if you want to registered a variadic
+option, this option must be registered at the end and not other variadic options to be registered
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">optName</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the option's name or its long/short flag to be registered
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">rest</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">rest</code> be registered
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
   </p>
 </div>
 
@@ -1690,6 +1771,437 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
+  <a href="#Command.provides" id="Command.provides"><code class="code">provides</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.provides"></span>Self <code class="code">provides</code>(in string <code class="code">name</code>, in string[] <code class="code">rest</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    expose its option values by names to its sub or sub sub and etc command.
+its sub or sub sub and etc command can access these option values using <code class="code">Command.injects</code> by names.
+remember that it is only useful for non-builtin options!
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">name</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">name</code> of option to be exposed
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">rest</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">rest</code> names of options to be exposed
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.providesAs" id="Command.providesAs"><code class="code">providesAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.providesAs"></span>Self <code class="code">providesAs</code>(in string <code class="code">name</code>, in string <code class="code">asName</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    see also <code class="code">Self provides(string <code class="code">name</code>, string[] rest...)</code>.
+this member function are used for register an option to be exposed as an new <code class="code">name</code>.
+this is usually used when you want to avoid <code class="code">name</code> confilict.
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">name</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">name</code> of option to be exposed
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">asName</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the new <code class="code">name</code> of option to be exposed
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.providesAs" id="Command.providesAs"><code class="code">providesAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.providesAs.2"></span>Self <code class="code">providesAs</code>(in string[string] <code class="code">optsMap</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    see also <code class="code">Self <code class="code">providesAs</code>(in string name, in string asName)</code>.
+expose option values in new names at the same time
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[string] <code class="code">optsMap</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the map of name and asName
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.injects" id="Command.injects"><code class="code">injects</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.injects"></span>Self <code class="code">injects</code>(in string <code class="code">name</code>, in string[] <code class="code">rest</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    inject the options' values exposed by ancestor command by <code class="code">name</code> that are registered
+using <code class="code">Command.provides</code> or <code class="code">Command.providesAs</code>, so that we can access this option value.
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">name</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">name</code> of option to be injected
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">rest</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">rest</code> <code class="code">name</code> of option to be injected
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.injectsAs" id="Command.injectsAs"><code class="code">injectsAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.injectsAs"></span>Self <code class="code">injectsAs</code>(in string <code class="code">name</code>, in string <code class="code">asName</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    see also <code class="code">Self injects(string <code class="code">name</code>, string[] rest...)</code>.
+this member function are used for inject an option value as an new <code class="code">name</code>.
+this is usually used when you want to avoid <code class="code">name</code> confilict.
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">name</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">name</code> of option to be injected
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">asName</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the new <code class="code">name</code> of option to be injected
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.injectsAs" id="Command.injectsAs"><code class="code">injectsAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.injectsAs.2"></span>Self <code class="code">injectsAs</code>(in string[string] <code class="code">optsMap</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    see also <code class="code">Self <code class="code">injectsAs</code>(in string name, in string asName)</code>.
+inject option values in new names at the same time
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[string] <code class="code">optsMap</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the map of name and asName
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
   <a href="#Command.getOptVal" id="Command.getOptVal"><code class="code">getOptVal</code></a>
 </div>
 </div><div class="ddoc_decl">
@@ -2360,7 +2872,7 @@ if <code class="code"><code class="code">flags</code></code> and <code class="co
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Command.setConfigOption"></span>Self <code class="code">setConfigOption</code>(string <code class="code">flags</code> = "", string <code class="code">desc</code> = "", string <code class="code">envKey</code> = "");
+            <span class="ddoc_anchor" id="Command.setConfigOption"></span>Self <code class="code">setConfigOption</code>(string <code class="code">flags</code> = "", string <code class="code">desc</code> = "", string <code class="code">defaultDir</code> = "");
 
           </code>
         </p>
@@ -2372,9 +2884,9 @@ if <code class="code"><code class="code">flags</code></code> and <code class="co
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    set the config option, if <code class="code"><code class="code">flags</code></code> not defined, then config option's <code class="code">flags</code> is <code class="code">-C, --config &lt;config-path&gt;</code>;
-if `desc not defined, then description is by default;
-if <code class="code"><code class="code">envKey</code></code> not defined, then the <code class="code"><code class="code">envKey</code></code> would be <code class="code">${PROGRAM_NAME}_CONFIG_PATH</code>, which automatically store the path to config file
+    set the config option, if <code class="code"><code class="code">flags</code></code> not defined, then config option's <code class="code">flags</code> is <code class="code">-C, --config &lt;config-dirs...&gt;</code>;
+if <code class="code"><code class="code">desc</code></code> not defined, then description is by default;
+if <code class="code"><code class="code">defaultDir</code></code> not defined, then the <code class="code"><code class="code">defaultDir</code></code> would be <code class="code">${CURRENT_WORKER_DIR}</code>, which automatically store the path to dir of config file
 
   </p>
 </div>
@@ -2413,13 +2925,13 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
 <tr class="ddoc_param_row">
   <td scope="ddoc_param_id">
   <code class="code">
-    <em class="term">string <code class="code">envKey</code></em>
+    <em class="term">string <code class="code">defaultDir</code></em>
   </code>
 </td>
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      the <code class="code">envKey</code> of an env variable that store the destination of config file
+      the built-in path to the dir of config file, which priority is higher than <code class="code">${YOUR_PROGRAM_DIR}/{YOUR_PROGRAM_NAME}.config.json</code>
     </p>
   </div>
 </td>
@@ -2431,7 +2943,7 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
 <div class="ddoc_returns">
   <h4>Return Value</h4>
   <p class="para">
-    
+    <code class="code">Self</code> for chain call
   </p>
 </div>
 
@@ -3593,7 +4105,7 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
-  <a href="#Command.variadicMerge" id="Command.variadicMerge"><code class="code">variadicMerge</code></a>
+  <a href="#Command.allowVariadicMerge" id="Command.allowVariadicMerge"><code class="code">allowVariadicMerge</code></a>
 </div>
 </div><div class="ddoc_decl">
   <section class="section">
@@ -3602,7 +4114,7 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Command.variadicMerge"></span>Self <code class="code">variadicMerge</code>(bool <code class="code">allow</code>);
+            <span class="ddoc_anchor" id="Command.allowVariadicMerge"></span>Self <code class="code">allowVariadicMerge</code>(bool <code class="code">allow</code>);
 
           </code>
         </p>
@@ -3615,6 +4127,38 @@ if <code class="code"><code class="code">envKey</code></code> not defined, then 
   <div class="ddoc_summary">
   <p class="para">
     whether <code class="code">allow</code> variadic options' final values merge from different source, default: <code class="code">true</code>
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.allowExposeOptionValue" id="Command.allowExposeOptionValue"><code class="code">allowExposeOptionValue</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.allowExposeOptionValue"></span>Self <code class="code">allowExposeOptionValue</code>(bool <code class="code">allow</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    whether <code class="code">allow</code> expose options' values to its sub commands, default: <code class="code">false</code>
   </p>
 </div>
 

@@ -23,6 +23,9 @@
 	"buildTypes": {
 		"doc": {
 			"dflags": ["-Dddoc"]
-		}
+		},
+        itf: {
+            dflags: [-Hd=include]
+        }
 	}
 }
