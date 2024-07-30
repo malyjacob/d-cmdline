@@ -25,7 +25,7 @@
 	"buildTypes": {
 		"doc": {
 			"dflags": [
-				"-Dddoc"
+				"-Dddoc", "-wi"
 			]
 		},
 		"itf": {

@@ -417,10 +417,6 @@
         white-space: pre-wrap;
       }
 
-      .ddoc .code_lines pre {
-        display: contents;
-      }
-
       .ddoc .code_lines li:only-of-type::before {
         color: rgba(255, 255, 255, 1);
         content: " ";
@@ -528,6 +524,7 @@
 we can configure the <code class="code">command</code> in manly way
 and then use <code class="code">Command.parse</code> to parse the input <code class="code">command</code> line.
 if you define its action callback, this callback would be called when parsing.
+
 
   </p>
 </div>
@@ -1280,7 +1277,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Command.addCommand"></span>Self <code class="code">addCommand</code>(Command <code class="code">cmd</code>, bool[string] <code class="code">cmdOpts</code>);
+            <span class="ddoc_anchor" id="Command.addCommand"></span>Self <code class="code">addCommand</code>(Command <code class="code">cmd</code>, bool[string] <code class="code">cmdOpts</code> = null);
 
           </code>
         </p>

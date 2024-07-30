@@ -6,6 +6,7 @@ This modlue mainly has `Command` Type.
 we can configure the command in manly way
 and then use `Command.parse` to parse the input command line.
 if you define its action callback, this callback would be called when parsing. 
+
 Authors: 笑愚(xiaoyu)
 +/
 module cmdline.command;
@@ -88,6 +89,8 @@ package:
     string _defaultCommandName = "";
     string[] _aliasNames = [];
     string _selfPath = "";
+
+    string _called_sub = "";
 
     string _version = "*";
     string _usage = "";
@@ -215,8 +218,15 @@ public:
             if (opt.variadic)
                 variadic = opt.flags;
         }
-        this._argToOptNames ~= optName;
-        this._argToOptNames ~= rest;
+        if (this._arguments[$-1].variadic) {
+            this.error(
+                format!"connot register options `%s` as arguments for the last registred argument `%s` is variadic"(
+                    tmp.to!string,
+                    this._arguments[$-1]._name
+                )
+            );
+        }
+        this._argToOptNames ~= tmp;
         return this;
     }
 
@@ -305,7 +315,7 @@ public:
     ///   cmdOpts = see also `this.command(Args...)(string nameAndArgs, bool[string] cmdOpts = null)`
     /// `Args`: see alos `this.command(Args...)(string nameAndArgs, bool[string] cmdOpts = null)`
     /// Returns: `Self` for chain call
-    Self addCommand(Command cmd, bool[string] cmdOpts) {
+    Self addCommand(Command cmd, bool[string] cmdOpts = null) {
         if (!cmd._name.length) {
             this.error("Command passed to .addCommand() must have a name
                 - specify the name in Command constructor or using .name()");
@@ -1157,6 +1167,10 @@ public:
         catch (InvalidOptionError e) {
             parsingError(e.msg, e.code);
         }
+        if (this._abandons.length) {
+            this._options ~= this._abandons;
+            this._abandons = [];
+        }
     }
 
 package:
@@ -1203,6 +1217,7 @@ package:
                     cmd.jconfig = tmp;
                 }
             }
+            this._called_sub = cmd._name;
             cmd._parseCommand(unknowns);
             return;
         }
@@ -1262,9 +1277,11 @@ package:
             }
         }
         if (this.subCommand && this.subCommand._execHandler) {
+            this._called_sub = this.subCommand._name;
             this.subCommand.execSubCommand(parsed[1]);
         }
         if (this.subCommand) {
+            this._called_sub = this.subCommand._name;
             this.subCommand._parseCommand(parsed[1]);
         }
         else {
@@ -1445,8 +1462,8 @@ package:
                     }
                     else {
                         parsingError(format!"invalid value: `%s` for bool option `%s`"(
-                            arg[2 .. $],
-                            opt.flags
+                                arg[2 .. $],
+                                opt.flags
                         ));
                     }
                     continue;
@@ -1458,8 +1475,8 @@ package:
                     }
                     else {
                         parsingError(format!"invalid value: `%s` for negate option `%s`"(
-                            arg[2 .. $],
-                            nopt.flags
+                                arg[2 .. $],
+                                nopt.flags
                         ));
                     }
                     continue;
@@ -2475,6 +2492,10 @@ public:
                         }
                     }
                 }
+                if (this._abandons.length) {
+                    this._options ~= this._abandons;
+                    this._abandons = [];
+                }
                 this._exitSuccessfully();
             };
             this._actionHandler = listener;
@@ -2924,8 +2945,7 @@ struct ArgWrap {
     alias isValid this;
 
     /// get the innner type, remember use it after test whether it is valid
-    T get(T)() const
-    if (isArgValueType!T) {
+    T get(T)() const if (isArgValueType!T) {
         bool is_type = testType!T(this.innerValue);
         if (!is_type) {
             throw new CMDLineError("the inner type is not " ~ T.stringof);

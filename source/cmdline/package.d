@@ -15,6 +15,7 @@ this module consists of the following submodules export:
 ## [cmdline.option](./option.html)
 ## [cmdline.argument](./argument.html)
 ## [cmdline.command](./command.html)
+## [cmdline.ext](./ext.html)
 +/
 
 module cmdline;
@@ -23,6 +24,7 @@ public import cmdline.error;
 public import cmdline.option;
 public import cmdline.argument;
 public import cmdline.command;
+public import cmdline.ext;
 
 /// the default command given, which you can make it as a rooot command to construct a command line program.
 public Command program;
