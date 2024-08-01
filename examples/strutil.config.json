@@ -1,0 +1,24 @@
+{
+    "join": {
+        "arguments": [
+            "everything", "is", "by", "design"
+        ],
+        "options": {
+            "separator": " "
+        }
+    },
+    "split": {
+        "arguments": [
+            "everything is by design"
+        ],
+        "options": {
+            "separator": " "
+        }
+    },
+    "replace": {
+        "options": {
+            "ptr": "[a-zA-Z]+",
+            "rpl": "*"
+        }
+    }
+}

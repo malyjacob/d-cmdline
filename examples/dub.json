@@ -33,7 +33,6 @@
                 "\"$DUB\" build -c inject",
                 "\"$DUB\" build -c config",
                 "\"$DUB\" build -c varmerge",
-                "\"$DUB\" build -c cstruct",
                 "\"$DUB\" build -c strutil"
 
             ]
@@ -58,7 +57,6 @@
                 "\"$DUB\" build -c inject -b release",
                 "\"$DUB\" build -c config -b release",
                 "\"$DUB\" build -c varmerge -b release",
-                "\"$DUB\" build -c cstruct -b release",
                 "\"$DUB\" build -c strutil -b release"
             ]
         },
@@ -141,11 +139,6 @@
             "name": "varmerge",
             "targetName": "varmerge",
             "mainSourceFile": "./varmerge.d"
-        },
-        {
-            "name": "cstruct",
-            "targetName": "cstruct",
-            "mainSourceFile": "./cstruct.d"
         },
         {
             "name": "strutil",

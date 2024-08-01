@@ -37,7 +37,7 @@ enum __CMDLINE_EXT_isInnerValFieldOrResult__(T) = __CMDLINE_EXT_isInnerValField_
 enum isOutputResult(T) = is(T == struct)
     && T.stringof.length > 6 && (T.stringof)[$ - 6 .. $] == "Result"
     && FieldTypeTuple!T.length > 0
-    && allSatisfy!(__CMDLINE_EXT_isInnerValFieldOrResult__, FieldTypeTuple!T);
+    && anySatisfy!(__CMDLINE_EXT_isInnerValFieldOrResult__, FieldTypeTuple!T);
 
 /// Add description to a registered argument.
 /// Params:
@@ -301,14 +301,16 @@ mixin template DEFAULT(alias sub) {
     enum DEFAULT_ = sub.stringof;
 }
 
-/// prepare for the future use of function `ready`, which must be embedded at the top
+/// prepare for the future use of function `ready` and `getParent`, which must be embedded at the top
 /// of struct domain with `END` mixin-marco at the end of this struct domain.
 mixin template BEGIN() {
     enum bool __SPE_BEGIN_SEPCIAL__ = true;
     alias __SELF__ = __traits(parent, __SPE_BEGIN_SEPCIAL__);
+    static void* __PARENT__;
+    static string __PARENT_STRING_OF__;
 }
 
-/// prepare for the future use of function `ready`, which must be embedded at the end
+/// prepare for the future use of function `ready` and `getParent`, which must be embedded at the end
 /// of struct domain with `BEGIN` mixin-marco at the begin of this struct domain.
 mixin template END() {
     import std.traits;
@@ -317,6 +319,40 @@ mixin template END() {
     enum bool __SPE_END_SEPCIAL__ = true;
     static foreach (index, Type; Filter!(__CMDLINE_EXT_isInnerSubField__, FieldTypeTuple!__SELF__)) {
         mixin("static bool IF_" ~ PointerTarget!Type.stringof ~ "_ = false;");
+    }
+
+    static T* __GET_PARENT__(T)() {
+        if (this.__PARENT__ is null)
+            return null;
+        if (this.__PARENT_STRING_OF__ != T.stringof)
+            return null;
+        return cast(T*) this.__PARENT__;
+    }
+}
+
+/// get the pointer to result container of parent.
+/// Params:
+///   subOutput = the sub result container
+/// Returns: `null` if type of `subOutput` not embeds `BEGIN` and `END` or `T` is not correct
+T* getParent(T, U)(in U subOutput) if (isOutputResult!U && isOutputResult!T) {
+    static if (hasMember!(U, "__SPE_BEGIN_SEPCIAL__") && hasMember!(U, "__SPE_END_SEPCIAL__")) {
+        return subOutput.__GET_PARENT__!T;
+    }
+    else {
+        return null;
+    }
+}
+
+/// get the pointer to result container of parent.
+/// Params:
+///   subOutput = the pointer to the sub result container
+/// Returns: `null` if type of `subOutput` not embeds `BEGIN` and `END` or `T` is not correct
+T* getParent(T, U)(const(U)* subOutput) if (isOutputResult!U && isOutputResult!T) {
+    static if (hasMember!(U, "__SPE_BEGIN_SEPCIAL__") && hasMember!(U, "__SPE_END_SEPCIAL__")) {
+        return subOutput.__GET_PARENT__!T;
+    }
+    else {
+        return null;
     }
 }
 
@@ -327,7 +363,7 @@ mixin template END() {
 /// Params:
 ///   output = the main-command container
 /// Returns: `true` if the sub-command is ready, otherwise is not ready.
-bool ready(T, U)(const ref U output)
+bool ready(T, U)(const U* output)
         if (isOutputResult!T && isOutputResult!U && hasMember!(U, "__SPE_END_SEPCIAL__")) {
     return mixin(output.stringof ~ '.' ~ "IF_" ~ T.stringof ~ '_');
 }
@@ -338,7 +374,7 @@ bool ready(T, U)(const ref U output)
 ///   output = the main-command container
 /// Returns: a pointer to sub-command container if the sub-command is ready,
 ///     otherwise `null` 
-const(T)* subResult(T, U)(const ref U output)
+inout(T)* subResult(T, U)(inout(U)* output)
         if (isOutputResult!T && isOutputResult!U) {
     alias ftypes = FieldTypeTuple!U;
     alias fnames = FieldNameTuple!U;
@@ -497,7 +533,7 @@ Command construct(T)() if (isOutputResult!T) {
                 mixin SetOptValField!(cmd, Type, T, index, fnames);
             }
         }
-        else {
+        else static if (__CMDLINE_EXT_isInnerSubField__!Type) {
             {
                 mixin SetSubCommand!(cmd, Type);
             }
@@ -519,13 +555,13 @@ Command construct(T)() if (isOutputResult!T) {
 /// Params:
 ///   argv = the command line arguments in string
 /// Returns: an initialized instance of the command conatiner type
-T parse(T)(in string[] argv) if (isOutputResult!T) {
+T* parse(T)(in string[] argv) if (isOutputResult!T) {
     alias fnames = FieldNameTuple!T;
     alias ftypes = FieldTypeTuple!T;
+    assert(argv.length);
     auto cmd = construct!T;
-    if (argv.length)
-        cmd.parse(argv);
-    T output;
+    cmd.parse(argv);
+    T* output = new T;
     static foreach (index, name; fnames) {
         {
             mixin InitOutputResultField!(cmd, output, index, name, ftypes);
@@ -534,7 +570,32 @@ T parse(T)(in string[] argv) if (isOutputResult!T) {
     return output;
 }
 
+/// parse the command line option and argument parameters  according to the given command conatiner type.
+/// And invoke the `action` member function and return if exists, otherwise invoke member container's `action`
+/// member function recursely.
+/// T = the root command container type
+/// Params:
+///   argv = the arguments list in string
+void run(T)(in string[] argv) if (isOutputResult!T) {
+    T* output = parse!T(argv);
+    runImpl(output);
+}
+
 private:
+
+void runImpl(T)(T* output) if (isOutputResult!T) {
+    static if (hasMember!(T, "action")) {
+        output.action();
+    }
+    else {
+        alias fnames = FieldNameTuple!T;
+        static foreach (index, Type; Filter!(__CMDLINE_EXT_isInnerSubField__, FieldTypeTuple!T)) {
+            if (auto sub_output = output.subResult!(PointerTarget!Type)) {
+                runImpl(sub_output);
+            }
+        }
+    }
+}
 
 mixin template InitOutputResultField(alias cmd, alias output, alias index, alias name, ftypes...) {
     alias Type = ftypes[index];
@@ -544,10 +605,11 @@ mixin template InitOutputResultField(alias cmd, alias output, alias index, alias
     else static if (__CMDLINE_EXT_isInnerOptValField__!Type) {
         auto x = mixin(output.stringof ~ '.' ~ name) = cmd.findOption(name._tokeytab);
     }
-    else {
+    else static if (__CMDLINE_EXT_isInnerSubField__!Type) {
         alias T = PointerTarget!Type;
         alias sfnames = FieldNameTuple!T;
         alias sftypes = FieldTypeTuple!T;
+        debug pragma(msg, T.stringof, " ", typeof(output).stringof);
         Command sub = cmd.findCommand(T.stringof[0 .. $ - 6]._tokeytab);
         auto xfn = () {
             if (cmd._called_sub == sub._name) {
@@ -555,6 +617,10 @@ mixin template InitOutputResultField(alias cmd, alias output, alias index, alias
                     mixin(output.stringof ~ '.' ~ "IF_" ~ T.stringof ~ '_') = true;
                 }
                 auto sub_output = mixin(output.stringof ~ '.' ~ name) = new T;
+                static if (hasMember!(T, "__SPE_BEGIN_SEPCIAL__") && hasMember!(T, "__SPE_END_SEPCIAL__")) {
+                    auto x = T.__PARENT__ = output;
+                    auto xx = T.__PARENT_STRING_OF__ = PointerTarget!(typeof(output)).stringof;
+                }
                 static foreach (index, name; sfnames) {
                     {
                         mixin InitOutputResultField!(sub, sub_output, index, name, sftypes);
