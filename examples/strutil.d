@@ -14,6 +14,7 @@ mixin template ConfigCmd() {
     mixin VERSION!("0.0.1");
 
     mixin CONFIG;
+    mixin PASS_THROUGH;
 
     JoinResult* joinSub;
     SplitResult* splitSub;
@@ -21,6 +22,13 @@ mixin template ConfigCmd() {
 
     OptVal!(bool, "-f") flag;
     mixin DESC_OPT!(flag, "the global flag");
+
+    OptVal!(string, "-g [greeting]") greet;
+    mixin DESC_OPT!(greet, "set the greeting string");
+    mixin PRESET!(greet, "hello!");
+    mixin DEFAULT!(greet, "hi!");
+
+    mixin NEGATE!(greet, "-G", "opposite to `--greet`");
 }
 
 mixin template ConfigSplitCmd() {
@@ -40,7 +48,8 @@ mixin template ConfigSplitCmd() {
 
     void action() {
         StrutilResult* parent = this.getParent!StrutilResult;
-        writeln(parent.flag.isValid ? true : false);
+        writeln(parent.flag ? true : false);
+        writeln(parent.greet ? parent.greet.get : "no greeting");
         string s = str.get;
         string sp = separator.get;
         writeln(split(s, sp));
@@ -62,7 +71,8 @@ mixin template ConfigJoinCmd() {
 
     void action() {
         StrutilResult* parent = this.getParent!StrutilResult;
-        writeln(parent.flag.isValid ? true : false);
+        writeln(parent.flag ? true : false);
+        writeln(parent.greet ? parent.greet.get : "no greeting");
         auto ss = strs.get;
         auto sp = separator.get;
         writeln(ss.join(sp));
@@ -101,20 +111,21 @@ mixin template ConfigReplaceCmd() {
 
     void action() {
         StrutilResult* parent = this.getParent!StrutilResult;
-        writeln(parent.flag.isValid ? true : false);
+        writeln(parent.flag ? true : false);
+        writeln(parent.greet ? parent.greet.get : "no greeting");
         string _str = this.str.get;
         string _ptr = this.ptr.get;
         string _rstr = this.rpl.get;
-        string _igc = this.igc.isValid ? "i" : "";
-        string _glb = this.glb.isValid ? "g" : "";
-        string _mlt = this.mlt.isValid ? "m" : "";
+        string _igc = this.igc ? "i" : "";
+        string _glb = this.glb ? "g" : "";
+        string _mlt = this.mlt ? "m" : "";
         version (Windows) {
             enum os_num = 0;
         }
         else version (Posix) {
             enum os_num = 1;
         }
-        bool is_cmp = this.cmp.isValid && os_num;
+        bool is_cmp = this.cmp && os_num;
         auto fmt = `\033[36m%s\033[0m`;
         auto fn = (Captures!string m) {
             string tmp = '_'.repeat.take(m.hit.length).array;

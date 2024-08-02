@@ -1711,6 +1711,37 @@ from various source
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
+  <a href="#PASS_THROUGH" id="PASS_THROUGH"><code class="code">PASS_THROUGH</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="PASS_THROUGH"></span>template <code class="code">PASS_THROUGH</code>()
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    allow the command to pass through its option flag behind sub command
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
   <a href="#CONFIG" id="CONFIG"><code class="code">CONFIG</code></a>
 </div>
 </div><div class="ddoc_decl">
@@ -1897,7 +1928,7 @@ where the config file should be. if not defied then the flag would be
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    prepare for the future use of function <code class="code">ready</code>, which must be embedded at the top
+    prepare for the future use of function <code class="code">ready</code> and <code class="code">getParent</code>, which must be embedded at the top
 of struct domain with <code class="code">END</code> mixin-marco at the end of this struct domain.
   </p>
 </div>
@@ -1929,8 +1960,130 @@ of struct domain with <code class="code">END</code> mixin-marco at the end of th
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    prepare for the future use of function <code class="code">ready</code>, which must be embedded at the end
+    prepare for the future use of function <code class="code">ready</code> and <code class="code">getParent</code>, which must be embedded at the end
 of struct domain with <code class="code">BEGIN</code> mixin-marco at the begin of this struct domain.
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#getParent" id="getParent"><code class="code">getParent</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="getParent"></span>T* <code class="code">getParent</code>(T, U)(in U <code class="code">subOutput</code>) if (isOutputResult!U &amp;&amp; isOutputResult!T);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    get the pointer to result container of parent.
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">U <code class="code">subOutput</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the sub result container
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">null</code> if type of <code class="code"><code class="code">subOutput</code></code> not embeds <code class="code">BEGIN</code> and <code class="code">END</code> or <code class="code">T</code> is not correct
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#getParent" id="getParent"><code class="code">getParent</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="getParent.2"></span>T* <code class="code">getParent</code>(T, U)(const(U)* <code class="code">subOutput</code>) if (isOutputResult!U &amp;&amp; isOutputResult!T);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    get the pointer to result container of parent.
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">const(U)* <code class="code">subOutput</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the pointer to the sub result container
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">null</code> if type of <code class="code"><code class="code">subOutput</code></code> not embeds <code class="code">BEGIN</code> and <code class="code">END</code> or <code class="code">T</code> is not correct
   </p>
 </div>
 
@@ -1950,7 +2103,7 @@ of struct domain with <code class="code">BEGIN</code> mixin-marco at the begin o
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="ready"></span>bool <code class="code">ready</code>(T, U)(const ref U <code class="code">output</code>) if (isOutputResult!T &amp;&amp; isOutputResult!U &amp;&amp; hasMember!(U, "__SPE_END_SEPCIAL__"));
+            <span class="ddoc_anchor" id="ready"></span>bool <code class="code">ready</code>(T, U)(const U* <code class="code">output</code>) if (isOutputResult!T &amp;&amp; isOutputResult!U &amp;&amp; hasMember!(U, "__SPE_END_SEPCIAL__"));
 
           </code>
         </p>
@@ -1976,7 +2129,7 @@ main command container.
       <tr class="ddoc_param_row">
   <td scope="ddoc_param_id">
   <code class="code">
-    <em class="term">U <code class="code">output</code></em>
+    <em class="term">U* <code class="code">output</code></em>
   </code>
 </td>
 <td>
@@ -2014,7 +2167,7 @@ main command container.
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="subResult"></span>const(T)* <code class="code">subResult</code>(T, U)(const ref U <code class="code">output</code>) if (isOutputResult!T &amp;&amp; isOutputResult!U);
+            <span class="ddoc_anchor" id="subResult"></span>inout(T)* <code class="code">subResult</code>(T, U)(inout(U)* <code class="code">output</code>) if (isOutputResult!T &amp;&amp; isOutputResult!U);
 
           </code>
         </p>
@@ -2038,7 +2191,7 @@ main command container.
       <tr class="ddoc_param_row">
   <td scope="ddoc_param_id">
   <code class="code">
-    <em class="term">U <code class="code">output</code></em>
+    <em class="term">inout(U)* <code class="code">output</code></em>
   </code>
 </td>
 <td>
@@ -2465,7 +2618,7 @@ can implicitly convert to bool value same as the result of <code class="code">Ar
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="parse"></span>T <code class="code">parse</code>(T)(in string[] <code class="code">argv</code>) if (isOutputResult!T);
+            <span class="ddoc_anchor" id="parse"></span>T* <code class="code">parse</code>(T)(in string[] <code class="code">argv</code>) if (isOutputResult!T);
 
           </code>
         </p>
@@ -2509,6 +2662,64 @@ T = the command conatiner type
   <p class="para">
     an initialized instance of the command conatiner type
   </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#run" id="run"><code class="code">run</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="run"></span>void <code class="code">run</code>(T)(in string[] <code class="code">argv</code>) if (isOutputResult!T);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    parse the command line option and argument parameters  according to the given command conatiner type.
+And invoke the <code class="code">action</code> member function and return if exists, otherwise invoke member container's <code class="code">action</code>
+member function recursely.
+T = the root command container type
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">argv</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the arguments list in string
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
 </div>
 
 </section>

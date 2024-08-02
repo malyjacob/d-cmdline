@@ -264,6 +264,11 @@ mixin template DISABLE_HELP() {
     enum DISABLE_HELP_ = true;
 }
 
+/// allow the command to pass through its option flag behind sub command
+mixin template PASS_THROUGH() {
+    enum bool PASS_THROUGH_ = true;
+}
+
 /// enable gaining value from config file in json and set an option that specifies
 /// the directories where the config file should be
 /// Params:
@@ -463,11 +468,16 @@ struct OptVal(T, string shortAndVal, bool isMandatory = false) {
     /// test whether the inner value is ready.
     /// Returns: `true` if ready, otherwise not ready.
     bool isValid() const {
-        return _inner.settled;
+        return _inner !is null && _inner.settled;
     }
+
+    // make `OptVal` enable to implicitly convert to bool value
+    // same as the result of `isValid`
+    alias isValid this;
 
     /// get the value in type of `T`
     auto get() const {
+        assert(isValid);
         return _inner.get!T;
     }
 
@@ -518,6 +528,9 @@ Command construct(T)() if (isOutputResult!T) {
     }
     static if (hasMember!(T, "DEFAULT_")) {
         cmd._defaultCommandName = T.DEFAULT_;
+    }
+    static if (hasMember!(T, "PASS_THROUGH_")) {
+        cmd._passThroughOptionValue = true;
     }
     static if (hasMember!(T, "ALIAS_")) {
         cmd.aliasName(T.ALIAS_);

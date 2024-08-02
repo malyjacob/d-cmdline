@@ -36,7 +36,6 @@ import cmdline.pattern;
 import cmdline.event;
 
 version (Windows) import core.sys.windows.windows;
-import core.sys.posix.libgen;
 
 /// the enum represents the position of appendent help text
 enum AddHelpPos : string {
@@ -121,6 +120,7 @@ package:
     bool _combineFlagAndOptionalValue = true;
     bool _allowVariadicMerge = true;
     bool _allowExposeOptionValue = false;
+    bool _passThroughOptionValue = false;
 
     void delegate() _actionHandler = null;
     Help _helpConfiguration = new Help;
@@ -156,6 +156,9 @@ package:
         this._showHelpAfterError = src._showHelpAfterError;
         this._showSuggestionAfterError = src._showSuggestionAfterError;
         this._combineFlagAndOptionalValue = src._combineFlagAndOptionalValue;
+        this._allowVariadicMerge = src._allowVariadicMerge;
+        this._allowExposeOptionValue = src._allowExposeOptionValue;
+        this._passThroughOptionValue = src._passThroughOptionValue;
         this._outputConfiguration = src._outputConfiguration;
         this._helpConfiguration = src._helpConfiguration;
         return this;
@@ -218,12 +221,12 @@ public:
             if (opt.variadic)
                 variadic = opt.flags;
         }
-        if (this._arguments[$-1].variadic) {
+        if (this._arguments.length && this._arguments[$ - 1].variadic) {
             this.error(
                 format!"connot register options `%s` as arguments for the last registred argument `%s` is variadic"(
                     tmp.to!string,
-                    this._arguments[$-1]._name
-                )
+                    this._arguments[$ - 1]._name
+            )
             );
         }
         this._argToOptNames ~= tmp;
@@ -1167,10 +1170,6 @@ public:
         catch (InvalidOptionError e) {
             parsingError(e.msg, e.code);
         }
-        if (this._abandons.length) {
-            this._options ~= this._abandons;
-            this._abandons = [];
-        }
     }
 
 package:
@@ -1289,247 +1288,374 @@ package:
         }
     }
 
+    private
+    mixin template InitAfterDash(alias _args, alias get_front, alias find_cmd, alias operands, alias unknowns) {
+        import std.range : popFront;
+
+        auto __xfn__InitFaterDash = {
+            auto value = get_front(_args);
+            if (value.length == 0) {
+                this.parsingError(
+                    "cannot end with `--`");
+            }
+            auto cmd = find_cmd(value);
+            while (!cmd && value.length) {
+                operands ~= value;
+                popFront(_args);
+                value = get_front(_args);
+                cmd = find_cmd(value);
+            }
+            if (cmd) {
+                this.subCommand = cmd;
+                popFront(_args);
+                if (subCommand.immediately)
+                    subCommand._parseCommand(_args);
+                unknowns ~= _args;
+            }
+            return 1;
+        }();
+        // auto x = __xfn__xfn__InitFaterDash();
+    }
+
+    private
+    mixin template InitVariadicOpt(alias _args, alias get_front, alias maybe_opt, alias vvm, alias name) {
+        import std.range : empty, popFront;
+
+        auto __xfn_InitVariadicOpt = {
+            auto value = get_front(_args);
+            string[] tmps = [];
+            while (value.length && !maybe_opt(value)) {
+                tmps ~= value;
+                popFront(_args);
+                value = get_front(_args);
+            }
+            auto ptr = name in vvm;
+            if (ptr)
+                *ptr ~= tmps;
+            else
+                vvm[name] = tmps;
+            return 1;
+        }();
+    }
+
+    private
+    mixin template InitValueOpt(alias cmd, bool requried, alias _args,
+        alias get_front, alias maybe_opt, alias opt, alias name) {
+        import std.range : empty, popFront;
+
+        static if (requried) {
+            auto __xfn_InitValueOpt = {
+                auto value = get_front(_args);
+                if (value.empty || maybe_opt(value))
+                    cmd.optionMissingArgument(opt);
+                cmd.emit("option:" ~ name, value);
+                if (cmd !is this) {
+                    opt.settled = false;
+                }
+                _args.popFront;
+                return 1;
+            }();
+        }
+        else {
+            auto __xfn_InitValueOpt = {
+                auto value = get_front(_args);
+                if (value.empty || maybe_opt(value))
+                    cmd.emit("option:" ~ name);
+                else {
+                    cmd.emit("option:" ~ name, value);
+                    _args.popFront;
+                }
+                if (cmd !is this) {
+                    opt.settled = false;
+                }
+                return 1;
+            }();
+        }
+    }
+
+    private
+    mixin template InitOptComb(alias cmd, alias _args, alias opt, alias vvm, alias arg) {
+        import std.array : insertInPlace;
+        import std.format;
+        import cmdline.option;
+
+        auto __xfn_InitOptComp = {
+            string name = opt.name;
+            if (opt.isRequired || opt.isOptional) {
+                bool is_variadic = opt.variadic;
+                if (!is_variadic)
+                    cmd.emit("option:" ~ name, arg[2 .. $]);
+                else {
+                    auto ptr = name in vvm;
+                    if (ptr)
+                        *ptr ~= arg[2 .. $];
+                    else
+                        vvm[name] = [arg[2 .. $]];
+                }
+            }
+            else if (cmd._combineFlagAndOptionalValue) {
+                cmd.emit("option:" ~ name);
+                _args.insertInPlace(0, "-" ~ arg[2 .. $]);
+            }
+            else {
+                cmd.parsingError(format!"invalid value: `%s` for bool option `%s`"(
+                        arg[2 .. $],
+                        opt.flags
+                ));
+            }
+            if (cmd !is this) {
+                opt.settled = false;
+            }
+            return 1;
+        }();
+    }
+
+    private
+    mixin template InitOptAssign(alias cmd, alias opt, alias vvm, alias value) {
+        import cmdline.option;
+
+        auto __xfn_InitOptAssign = {
+            string name = opt.name;
+            if (opt.isRequired || opt.isOptional) {
+                bool is_variadic = opt.variadic;
+                if (!is_variadic)
+                    cmd.emit("option:" ~ name, value);
+                else {
+                    auto ptr = name in vvm;
+                    if (ptr)
+                        *ptr ~= value;
+                    else
+                        vvm[name] = [value];
+                }
+            }
+            else
+                cmd.parsingError("invalid value: `" ~ value ~ "` for bool option " ~ opt.flags);
+            if (cmd !is this) {
+                opt.settled = false;
+            }
+            return 1;
+        }();
+    }
+
+    private bool maybe_opt(string str) {
+        return (str.length > 1 && str[0] == '-' &&
+                (str[1] == '-' || (str[1] >= 'A' && str[1] <= 'Z') ||
+                    (str[1] >= 'a' && str[1] <= 'z')));
+    }
+
+    private string get_front(string[] strs) {
+        return strs.empty ? "" : strs.front;
+    }
+
+    private bool init_opt(Command cmd, string arg, ref string[] _args, ref string[][string] vvm) {
+        bool is_continue = false;
+        if (auto opt = cmd._findOption(arg)) {
+            auto name = opt.name;
+            bool is_variadic = opt.variadic;
+            if (opt.isRequired) {
+                if (!is_variadic) {
+                    mixin InitValueOpt!(cmd, true, _args, get_front, maybe_opt, opt, name);
+                }
+                else {
+                    mixin InitVariadicOpt!(_args, get_front, maybe_opt, vvm, name);
+                }
+            }
+            else if (opt.isOptional) {
+                if (!is_variadic) {
+                    mixin InitValueOpt!(cmd, false, _args, get_front, maybe_opt, opt, name);
+                }
+                else {
+                    mixin InitVariadicOpt!(_args, get_front, maybe_opt, vvm, name);
+                }
+            }
+            else {
+                cmd.emit("option:" ~ name);
+            }
+            is_continue = true;
+        }
+        if (auto nopt = cmd._findNegateOption(arg)) {
+            cmd.emit("negate:" ~ nopt.name);
+            is_continue = true;
+        }
+        return is_continue;
+    }
+
+    private bool init_comb(Command cmd, string arg, ref string[] _args, ref string[][string] vvm) {
+        bool is_continue = false;
+        auto flag = "-" ~ arg[1];
+        if (Option opt = cmd._findOption(flag)) {
+            mixin InitOptComb!(cmd, _args, opt, vvm, arg);
+            is_continue = true;
+        }
+        if (NegateOption nopt = cmd._findNegateOption(flag)) {
+            if (cmd._combineFlagAndOptionalValue) {
+                cmd.emit("negate:" ~ nopt.name);
+                _args.insertInPlace(0, "-" ~ arg[2 .. $]);
+            }
+            else {
+                cmd.parsingError(format!"invalid value: `%s` for negate option `%s`"(
+                        arg[2 .. $],
+                        nopt.flags
+                ));
+            }
+            is_continue = true;
+        }
+        return is_continue;
+    }
+
+    private bool init_assign(Command cmd, in Captures!string cp, ref string[][string] vvm) {
+        bool is_continue = false;
+        string value = cp[2];
+        if (Option opt = cmd._findOption(cp[1])) {
+            mixin InitOptAssign!(cmd, opt, vvm, value);
+            is_continue = true;
+        }
+        return is_continue;
+    }
+
+    private void init_variadic(Command cmd, ref string[][string] vvm) {
+        if (!vvm)
+            return;
+        foreach (key, ref value; vvm) {
+            if (cmd is this && cmd._configOption && cmd._configOption.name == key) {
+                cmd.emit("option:" ~ key, value.reverse);
+            }
+            else {
+                cmd.emit("option:" ~ key, value);
+                if (cmd !is this) {
+                    auto opt = cmd._findOption(key);
+                    opt.settled = false;
+                }
+            }
+        }
+        vvm = null;
+    }
+
+    private void init_hv(Command cmd, string arg) {
+        if (Option help_opt = cmd._helpOption) {
+            if (help_opt.isFlag(arg)) {
+                cmd.emit("option:" ~ help_opt.name);
+            }
+        }
+        else if (cmd._addImplicitHelpOption) {
+            if (arg == "-h" || arg == "--help") {
+                auto hopt = cmd._getHelpOption();
+                cmd.emit("option:" ~ hopt.name);
+            }
+        }
+        if (Option vopt = cmd._versionOption) {
+            if (vopt.isFlag(arg)) {
+                cmd.emit("option:" ~ vopt.name);
+            }
+        }
+    }
+
+    private Command find_cmd(string str) {
+        auto _cmd = _findCommand(str);
+        auto vcmd = this._versionCommand;
+        auto hcmd = this._helpCommand;
+        _cmd = !_cmd && vcmd && vcmd._name == str ? vcmd : _cmd;
+        _cmd = !_cmd && hcmd && hcmd._name == str ? hcmd : _cmd;
+        _cmd = _cmd ? _cmd : (!hcmd && str == "help") ? this._getHelpCommand() : null;
+        return _cmd;
+    }
+
+    private bool init_opt_command(string arg, ref string[] _args, ref string[][string] vvm, ref string[][string] pvvm) {
+        init_hv(this, arg);
+        if (Option copt = this._configOption) {
+            if (copt.isFlag(arg)) {
+                string name = copt.name;
+                mixin InitVariadicOpt!(_args, get_front, maybe_opt, vvm, name);
+                return true;
+            }
+        }
+        if (init_opt(this, arg, _args, vvm)) {
+            return true;
+        }
+        if (this.parent && this.parent._passThroughOptionValue) {
+            if (init_opt(this.parent, arg, _args, pvvm))
+                return true;
+        }
+        return false;
+    }
+
+    private bool init_opt_comb(string arg, ref string[] _args, ref string[][string] vvm, ref string[][string] pvvm) {
+        string flag = "-" ~ arg[1];
+        init_hv(this, flag);
+        if (Option copt = this._configOption) {
+            if (copt.isFlag(flag)) {
+                string name = copt.name;
+                auto ptr = name in vvm;
+                if (ptr)
+                    *ptr ~= arg[2 .. $];
+                else
+                    vvm[name] = [arg[2 .. $]];
+                return true;
+            }
+        }
+        if (init_comb(this, arg, _args, vvm))
+            return true;
+        if (this.parent && this.parent._passThroughOptionValue) {
+            if (init_comb(this.parent, arg, _args, pvvm))
+                return true;
+        }
+        return false;
+    }
+
+    private bool init_opt_assign(in Captures!string cp, ref string[][string] vvm, ref string[][string] pvvm) {
+        if (Option copt = this._configOption) {
+            if (copt.isFlag(cp[1])) {
+                string value = cp[2];
+                name = copt.name;
+                auto ptr = name in vvm;
+                if (ptr)
+                    *ptr ~= value;
+                else
+                    vvm[name] = [value];
+                return true;
+            }
+        }
+        if (init_assign(this, cp, vvm))
+            return true;
+        if (this.parent && this.parent._passThroughOptionValue) {
+            if (init_assign(this.parent, cp, pvvm))
+                return true;
+        }
+        return false;
+    }
+
     Tuple!(string[], string[]) parseOptions(in string[] argv) {
         string[] operands = [];
         string[] unknowns = [];
-
         string[] _args = argv.dup;
-        auto maybe_opt = (string str) {
-            return (str.length > 1 && str[0] == '-' &&
-                    (str[1] == '-' || (str[1] >= 'A' && str[1] <= 'Z') ||
-                        (str[1] >= 'a' && str[1] <= 'z')));
-        };
-        auto get_front = (string[] strs) => strs.empty ? "" : strs.front;
-        auto find_cmd = (string str) {
-            auto _cmd = _findCommand(str);
-            auto vcmd = this._versionCommand;
-            auto hcmd = this._helpCommand;
-            _cmd = !_cmd && vcmd && vcmd._name == str ? vcmd : _cmd;
-            _cmd = !_cmd && hcmd && hcmd._name == str ? hcmd : _cmd;
-            _cmd = _cmd ? _cmd : (!hcmd && str == "help") ? this._getHelpCommand() : null;
-            return _cmd;
-        };
         string[][string] variadic_val_map = null;
+        string[][string] pvariadic_val_map = null;
+
         while (_args.length) {
             auto arg = _args.front;
             _args.popFront;
 
             if (arg == "--") {
-                auto value = get_front(_args);
-                if (value.length == 0) {
-                    this.parsingError(
-                        "cannot end with `--`");
-                }
-                auto cmd = find_cmd(value);
-                while (!cmd && value.length) {
-                    operands ~= value;
-                    popFront(_args);
-                    value = get_front(_args);
-                    cmd = find_cmd(value);
-                }
-                if (cmd) {
-                    this.subCommand = cmd;
-                    popFront(_args);
-                    if (subCommand.immediately)
-                        subCommand._parseCommand(_args);
-                    unknowns ~= _args;
-                }
+                mixin InitAfterDash!(_args, get_front, find_cmd, operands, unknowns);
                 break;
             }
 
             if (maybe_opt(arg)) {
-                auto opt = _findOption(arg);
-                auto nopt = _findNegateOption(arg);
-                if (opt) {
-                    auto name = opt.name;
-                    bool is_variadic = opt.variadic;
-                    if (opt.isRequired) {
-                        if (!is_variadic) {
-                            auto value = get_front(_args);
-                            if (value.empty || maybe_opt(value))
-                                this.optionMissingArgument(opt);
-                            this.emit("option:" ~ name, value);
-                            _args.popFront;
-                        }
-                        else {
-                            auto value = get_front(_args);
-                            string[] tmps = [];
-                            while (value.length && !maybe_opt(value)) {
-                                tmps ~= value;
-                                popFront(_args);
-                                value = get_front(_args);
-                            }
-                            auto ptr = name in variadic_val_map;
-                            if (ptr)
-                                *ptr ~= tmps;
-                            else
-                                variadic_val_map[name] = tmps;
-                        }
-                    }
-                    else if (opt.isOptional) {
-                        if (!is_variadic) {
-                            auto value = get_front(_args);
-                            if (value.empty || maybe_opt(value))
-                                this.emit("option:" ~ name);
-                            else {
-                                this.emit("option:" ~ name, value);
-                                _args.popFront;
-                            }
-                        }
-                        else {
-                            auto value = get_front(_args);
-                            string[] tmps = [];
-                            while (value.length && !maybe_opt(value)) {
-                                tmps ~= value;
-                                popFront(_args);
-                                value = get_front(_args);
-                            }
-                            auto ptr = name in variadic_val_map;
-                            if (ptr)
-                                *ptr ~= tmps;
-                            else
-                                variadic_val_map[name] = tmps;
-                        }
-                    }
-                    else {
-                        // if (opt.settled && !opt.get!bool)
-                        //     conflctNegateOption(arg);
-                        this.emit("option:" ~ name);
-                    }
+                if (init_opt_command(arg, _args, variadic_val_map, pvariadic_val_map))
                     continue;
-                }
-                if (nopt) {
-                    this.emit("negate:" ~ nopt.name);
-                    continue;
-                }
-                if (Option help_opt = this._helpOption) {
-                    if (help_opt.isFlag(arg)) {
-                        this.emit("option:" ~ help_opt.name);
-                        continue;
-                    }
-                }
-                else if (this._addImplicitHelpOption) {
-                    if (arg == "-h" || arg == "--help") {
-                        auto hopt = this._getHelpOption();
-                        this.emit("option:" ~ hopt.name);
-                        continue;
-                    }
-                }
-                if (Option vopt = this._versionOption) {
-                    if (vopt.isFlag(arg)) {
-                        this.emit("option:" ~ vopt.name);
-                        continue;
-                    }
-                }
-                if (Option copt = this._configOption) {
-                    if (copt.isFlag(arg)) {
-                        string value = get_front(_args);
-                        string[] tmps = [];
-                        while (value.length && !maybe_opt(value)) {
-                            tmps ~= value;
-                            popFront(_args);
-                            value = get_front(_args);
-                        }
-                        auto ptr = copt.name in variadic_val_map;
-                        if (ptr)
-                            *ptr ~= tmps;
-                        else
-                            variadic_val_map[copt.name] = tmps;
-                        continue;
-                    }
-                }
             }
 
             if (arg.length > 2 && arg[0] == '-' && arg[1] != '-') {
-                Option opt = _findOption("-" ~ arg[1]);
-                if (opt) {
-                    string name = opt.name;
-                    if (opt.isRequired || opt.isOptional) {
-                        bool is_variadic = opt.variadic;
-                        if (!is_variadic)
-                            this.emit("option:" ~ name, arg[2 .. $]);
-                        else {
-                            auto ptr = name in variadic_val_map;
-                            if (ptr)
-                                *ptr ~= arg[2 .. $];
-                            else
-                                variadic_val_map[name] = [arg[2 .. $]];
-                        }
-                    }
-                    else if (_combineFlagAndOptionalValue) {
-                        this.emit("option:" ~ name);
-                        _args.insertInPlace(0, "-" ~ arg[2 .. $]);
-                    }
-                    else {
-                        parsingError(format!"invalid value: `%s` for bool option `%s`"(
-                                arg[2 .. $],
-                                opt.flags
-                        ));
-                    }
+                if (init_opt_comb(arg, _args, variadic_val_map, pvariadic_val_map))
                     continue;
-                }
-                if (NegateOption nopt = _findNegateOption("-" ~ arg[1])) {
-                    if (_combineFlagAndOptionalValue) {
-                        this.emit("negate:" ~ nopt.name);
-                        _args.insertInPlace(0, "-" ~ arg[2 .. $]);
-                    }
-                    else {
-                        parsingError(format!"invalid value: `%s` for negate option `%s`"(
-                                arg[2 .. $],
-                                nopt.flags
-                        ));
-                    }
-                    continue;
-                }
-                if (Option copt = this._configOption) {
-                    if (copt.isFlag("-" ~ arg[1])) {
-                        string name = copt.name;
-                        auto ptr = name in variadic_val_map;
-                        if (ptr)
-                            *ptr ~= arg[2 .. $];
-                        else
-                            variadic_val_map[name] = [arg[2 .. $]];
-                        continue;
-                    }
-                }
+                this.unknownOption("-" ~ arg[1]);
             }
 
             auto cp = matchFirst(arg, PTN_LONGASSIGN);
             if (cp.length) {
-                Option opt = _findOption(cp[1]);
-                string value = cp[2];
-                if (opt) {
-                    string name = opt.name;
-                    if (opt.isRequired || opt.isOptional) {
-                        bool is_variadic = opt.variadic;
-                        if (!is_variadic)
-                            this.emit("option:" ~ name, value);
-                        else {
-                            auto ptr = name in variadic_val_map;
-                            if (ptr)
-
-                                *ptr ~= value;
-                            else
-                                variadic_val_map[name] = [value];
-                        }
-                    }
-                    else
-                        this.parsingError(
-                            "invalid value: `" ~ value ~ "` for bool option " ~ opt
-                                .flags);
+                if (init_opt_assign(cp, variadic_val_map, pvariadic_val_map))
                     continue;
-                }
-                if (Option copt = this._configOption) {
-                    if (copt.isFlag(cp[1])) {
-                        name = copt.name;
-                        auto ptr = name in variadic_val_map;
-                        if (ptr)
-                            *ptr ~= value;
-                        else
-                            variadic_val_map[name] = [value];
-                        continue;
-                    }
-                }
+                this.unknownOption(cp[1]);
             }
 
             if (auto _cmd = find_cmd(arg)) {
@@ -1544,18 +1670,22 @@ package:
 
             if (maybe_opt(arg))
                 unknownOption(arg);
-
             operands ~= arg;
         }
-        if (variadic_val_map) {
-            foreach (key, ref value; variadic_val_map)
-                if (this._configOption && this._configOption.name == key) {
-                    this.emit("option:" ~ key, value.reverse);
-                }
-                else
-                    this.emit("option:" ~ key, value);
+
+        init_variadic(this, variadic_val_map);
+        init_variadic(this.parent, pvariadic_val_map);
+        if (this.parent && this.parent._passThroughOptionValue) {
+            this.parent
+                ._options
+                .filter!(opt => opt.isValid && !opt.settled)
+                .each!((opt) { opt.initialize; });
+            this.parent.opts = this.parent
+                ._options
+                .filter!(opt => opt.settled)
+                .map!(opt => tuple(opt.name, opt.get))
+                .assocArray;
         }
-        variadic_val_map = null;
         return tuple(operands, unknowns);
     }
 
@@ -1574,27 +1704,28 @@ package:
             this.parsingError(msg, "command.disableOption");
         }
         else {
-            auto cmd = this;
-            auto hlp = cmd._helpConfiguration;
-            string suggestion = "";
-            const(string)[] more_flags;
-            string[] candidate_flags = [];
-            if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
-                more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
-                candidate_flags ~= more_flags;
+            string suggestion = this.getSuggestion(flag);
+            if (this.parent && this.parent._passThroughOptionValue && suggestion.length == 0) {
+                suggestion = this.parent.getSuggestion(flag);
             }
-            suggestion = suggestSimilar(flag, candidate_flags);
             msg = format("unknown option `%s` %s", flag, suggestion);
             this.parsingError(msg, "command.unknownOption");
         }
     }
 
-    // void conflctNegateOption(string flag) const {
-    //     string msg = format(
-    //         "if negate option difined on client terminal," ~
-    //             " then the releated option `%s` can not be", flag);
-    //     this.parsingError(msg, "command.conflictNegateOption");
-    // }
+    string getSuggestion(string flag) const {
+        auto cmd = this;
+        auto hlp = cmd._helpConfiguration;
+        string suggestion = "";
+        const(string)[] more_flags;
+        string[] candidate_flags = [];
+        if (flag[0 .. 2] == "--" && this._showSuggestionAfterError) {
+            more_flags = hlp.visibleOptions(cmd).map!(opt => opt.longFlag).array;
+            candidate_flags ~= more_flags;
+        }
+        suggestion = suggestSimilar(flag, candidate_flags);
+        return suggestion;
+    }
 
     void excessArguments() const {
         if (!this._allowExcessArguments) {
@@ -1972,7 +2103,7 @@ public:
             format("define the directories of the config file," ~
                     "if not specified, the config file name would be" ~
                     " `%s.config.json` and it is on the dir `%s` and current woker dir `%s`",
-                this._name, defaultDir, cwd) : desc;
+                    this._name, defaultDir, cwd) : desc;
         this._configPaths ~= defaultDir;
         this._configPaths ~= cwd;
         this._configPaths = this._configPaths.uniq.array;
@@ -2450,14 +2581,14 @@ public:
                 else {
                     this.opts = this.opts is null ?
                         this._options
-                            .filter!(opt => opt.settled)
-                            .map!(opt => tuple(opt.name, opt.get))
-                            .assocArray : this.opts;
+                        .filter!(opt => opt.settled)
+                        .map!(opt => tuple(opt.name, opt.get))
+                        .assocArray : this.opts;
                     this.args = this.args.empty ?
                         this._arguments
-                            .filter!(arg => arg.settled)
-                            .map!(arg => arg.get)
-                            .array : this.args;
+                        .filter!(arg => arg.settled)
+                        .map!(arg => arg.get)
+                        .array : this.args;
                     OptsWrap wopts = OptsWrap(this.opts);
                     static if (len == 1) {
                         fn(wopts);
@@ -2491,10 +2622,6 @@ public:
                             fn(wopts, wargs[0], wargs[1], wargs[2], wargs[3], wargs[4]);
                         }
                     }
-                }
-                if (this._abandons.length) {
-                    this._options ~= this._abandons;
-                    this._abandons = [];
                 }
                 this._exitSuccessfully();
             };
@@ -2709,6 +2836,13 @@ public:
         return this;
     }
 
+    /// whether allow pass through options' flags(config, help, version options are not included)
+    /// behind its sub commands, default: `false`
+    Self passThrough(bool allow = true) {
+        this._passThroughOptionValue = allow;
+        return this;
+    }
+
 package:
     void _exitErr(string msg, string code = "") const {
         this._outputConfiguration.writeErr("ERROR:\t" ~ msg ~ " " ~ code ~ "\n");
@@ -2760,11 +2894,11 @@ public:
             return "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-            ]) ~
+                        ]) ~
                     (_commands.length ? "[command]" : [
-            ]) ~
+                        ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-            ])
+                        ])
             ).join(" ");
         }
         return this._usage;
@@ -2792,11 +2926,11 @@ public:
             command._usage = "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-            ]) ~
+                        ]) ~
                     (_commands.length ? "[command]" : [
-            ]) ~
+                        ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-            ])
+                        ])
             ).join(" ");
         }
         else
@@ -2820,39 +2954,19 @@ unittest {
     cmd.description("this is test");
     assert("description: this is test" == cmd.description);
     cmd.description("this is test", [
-        "first": "1st",
-        "second": "2nd"
-    ]);
+            "first": "1st",
+            "second": "2nd"
+        ]);
     assert(
         cmd._argsDescription == [
-        "first": "1st",
-        "second": "2nd"
-    ]);
+            "first": "1st",
+            "second": "2nd"
+        ]);
     cmd.setVersion("0.0.1");
     // cmd.emit("command:version");
     // cmd.emit("option:version");
 }
 
-// unittest {
-//     auto program = new Command("program");
-//     program.command!(string, int)("start <service> [number]", "start named service", [
-//         "execFile": "./tmp/ss.txt"
-//     ]);
-//     auto arg1 = program._commands[0]._arguments[0];
-//     auto arg2 = program._commands[0]._arguments[1];
-//     writeln(program._commands[0]._execFile);
-//     writeln(arg1.name);
-//     writeln(arg2.name);
-
-//     auto cmd = program.command!(string, int)("stop <service> [number]", [
-//         "isDefault": true
-//     ]);
-//     auto arg3 = cmd._arguments[0];
-//     auto arg4 = cmd._arguments[1];
-//     writeln(program._defaultCommandName);
-//     writeln(arg3.name);
-//     writeln(arg4.name);
-// }
 
 /// create a command by name
 Command createCommand(string name) {
@@ -2976,22 +3090,3 @@ unittest {
     OutputConfiguration outputConfig = new OutputConfiguration;
     assert(outputConfig.getOutHelpWidth() == _getOutHelpWidth());
 }
-
-// unittest {
-//     Command program = createCommand("program");
-//     program.setVersion("0.0.1");
-//     program.allowExcessArguments(false);
-//     program.option("-f, --first <num>", "test", 13);
-//     program.option("-s, --second <num>", "test", 12);
-//     program.argument("[multi]", "乘数", 4);
-//     program.action((args, optMap) {
-//         auto fnum = optMap["first"].get!int;
-//         auto snum = optMap["second"].get!int;
-//         int multi = 1;
-//         if (args.length)
-//             multi = args[0].get!int;
-//         writeln("ACTION:\t", (fnum + snum) * multi);
-//     });
-
-//     program.parse(["program"]);
-// }
