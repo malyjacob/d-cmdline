@@ -4199,6 +4199,236 @@ behind its sub commands, default: <code class="code">false</code>
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
+  <a href="#Command.importAs" id="Command.importAs"><code class="code">importAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.importAs"></span>Self <code class="code">importAs</code>(bool isNegate = false)(string <code class="code">flag</code>, string[] <code class="code">aliasFlags</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    import the option <code class="code">flag</code> as new <code class="code">flag</code> from parent command, so that this new <code class="code">flag</code> can be pased as the
+the option <code class="code">flag</code> of parent command. this member function aims at avoidind <code class="code">flag</code> conflict between
+the command and its parent command, after using <code class="code">passThrough</code> on parent command.
+the parent command must exist and parent command must have used <code class="code">passThrough</code> and the <code class="code"><code class="code">flag</code></code> must
+be the <code class="code">flag</code> of one of the parent command's option or negate option.
+remeber that when parsing the new <code class="code">flag</code>, the option's new <code class="code">flag</code> is prior to the negate option ones.
+when parsing command line option flags, imported <code class="code">flag</code> is prior to exported one, and the export one is
+prior to the ordinary pass-through option <code class="code">flag</code>.
+<code class="code">isNegate</code> decide whether import negate option or non-negate one, default: <code class="code">false</code>
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">flag</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">flag</code>(or name) of one of the parent command's option or negate option
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">aliasFlags</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the new flags
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.importNAs" id="Command.importNAs"><code class="code">importNAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.importNAs"></span>alias <code class="code">importNAs</code> = .Command.importAs!true.importAs;
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    import the neagte option flag, see <code class="code">Command.importAs</code>
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.exportAs" id="Command.exportAs"><code class="code">exportAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.exportAs"></span>Self <code class="code">exportAs</code>(bool isNegate = false)(string <code class="code">flag</code>, string[] <code class="code">aliasFlags</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    export the option <code class="code">flag</code> as new <code class="code">flag</code> to sub command, so that this new <code class="code">flag</code> can be pased as the
+the option <code class="code">flag</code> of parent command. this member function aims at avoidind <code class="code">flag</code> conflict between
+the command and its sub command, after using <code class="code">passThrough</code> on this command.
+this function would be automatically call <code class="code">Command.passThrough</code>.
+the <code class="code"><code class="code">flag</code></code> must be the <code class="code">flag</code> of one of the command's option or negate option.
+remeber that when parsing the new <code class="code">flag</code>, the option's new <code class="code">flag</code> is prior to the negate option ones.
+when parsing command line option flags, imported <code class="code">flag</code> is prior to exported one, and the export one is
+prior to the ordinary pass-through option <code class="code">flag</code>.
+<code class="code">isNegate</code> decide whether export negate option or non-negate one, default: <code class="code">false</code>
+
+  </p>
+</div>
+<div class="ddoc_params">
+  <h4>Parameters</h4>
+  <table cellspacing="0" cellpadding="5" border="0" class="graybox">
+    <tbody>
+      <tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string <code class="code">flag</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the <code class="code">flag</code>(or name) of one of the command's option or negate option
+    </p>
+  </div>
+</td>
+</tr>
+<tr class="ddoc_param_row">
+  <td scope="ddoc_param_id">
+  <code class="code">
+    <em class="term">string[] <code class="code">aliasFlags</code></em>
+  </code>
+</td>
+<td>
+  <div class="ddoc_param_desc">
+    <p class="para">
+      the new flags
+    </p>
+  </div>
+</td>
+</tr>
+
+    </tbody>
+  </table>
+</div>
+<div class="ddoc_returns">
+  <h4>Return Value</h4>
+  <p class="para">
+    <code class="code">Self</code> for chain call
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.exportNAs" id="Command.exportNAs"><code class="code">exportNAs</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.exportNAs"></span>alias <code class="code">exportNAs</code> = .Command.exportAs!true.exportAs;
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    export the neagte option flag, see <code class="code">Command.exportAs</code>
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
   <a href="#Command.parsingError" id="Command.parsingError"><code class="code">parsingError</code></a>
 </div>
 </div><div class="ddoc_decl">

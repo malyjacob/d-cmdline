@@ -80,15 +80,15 @@ mixin template DESC(alias field, string desc) {
 ///   field = the option or argument in the type of `OptVal` or `ArgVal`
 ///   val = the default value
 mixin template DEFAULT(alias field, alias val) {
-    alias FType = typeof(field);
-    static assert(!is(FType.InnerType == bool));
-    static if (__CMDLINE_EXT_isInnerOptValField__!FType
-        && FType.VARIADIC
-        && is(ElementType!(FType.InnerType) == void)) {
-        static assert(is(typeof(val) == FType.InnerType[]));
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(!is(___FType___CMDLINE.InnerType == bool));
+    static if (__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE
+        && ___FType___CMDLINE.VARIADIC
+        && is(ElementType!(___FType___CMDLINE.InnerType) == void)) {
+        static assert(is(typeof(val) == ___FType___CMDLINE.InnerType[]));
     }
     else {
-        static assert(is(typeof(val) : FType.InnerType));
+        static assert(is(typeof(val) : ___FType___CMDLINE.InnerType));
     }
     debug pragma(msg, "static " ~ typeof(val)
             .stringof ~ " DEFAULT_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
@@ -100,14 +100,15 @@ mixin template DEFAULT(alias field, alias val) {
 ///   field = the option in the type of `OptVal`
 ///   val = the preset value
 mixin template PRESET(alias field, alias val) {
-    alias FType = typeof(field);
-    static assert(__CMDLINE_EXT_isInnerOptValField__!FType && !is(FType.InnerType == bool) && FType
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE && !is(
+            ___FType___CMDLINE.InnerType == bool) && ___FType___CMDLINE
             .OPTIONAL);
-    static if (FType.VARIADIC && is(ElementType!(FType.InnerType) == void)) {
-        static assert(is(typeof(val) == FType.InnerType[]));
+    static if (___FType___CMDLINE.VARIADIC && is(ElementType!(___FType___CMDLINE.InnerType) == void)) {
+        static assert(is(typeof(val) == ___FType___CMDLINE.InnerType[]));
     }
     else {
-        static assert(is(typeof(val) : FType.InnerType));
+        static assert(is(typeof(val) : ___FType___CMDLINE.InnerType));
     }
     debug pragma(msg, "static " ~ typeof(val)
             .stringof ~ " PRESET_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
@@ -119,8 +120,9 @@ mixin template PRESET(alias field, alias val) {
 ///   field = the option in the type of `OptVal`
 ///   envKey = the env key
 mixin template ENV(alias field, string envKey) {
-    alias FType = typeof(field);
-    static assert(__CMDLINE_EXT_isInnerOptValField__!FType && !is(FType.InnerType == bool));
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE && !is(
+            ___FType___CMDLINE.InnerType == bool));
     debug pragma(msg, "enum ENV_" ~ field.stringof ~ "_ = \"" ~ envKey ~ "\";");
     mixin("enum ENV_" ~ field.stringof ~ "_ = \"" ~ envKey ~ "\";");
 }
@@ -131,10 +133,10 @@ mixin template ENV(alias field, string envKey) {
 ///   Args = the choices list items
 mixin template CHOICES(alias field, Args...) {
     static assert(Args.length);
-    alias FType = typeof(field);
-    static assert(!is(FType.InnerType == bool));
-    enum isRegularType(alias val) = is(typeof(val) : FType.InnerType)
-        || is(ElementType!(FType.InnerType) == typeof(val));
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(!is(___FType___CMDLINE.InnerType == bool));
+    enum isRegularType(alias val) = is(typeof(val) : ___FType___CMDLINE.InnerType)
+        || is(ElementType!(___FType___CMDLINE.InnerType) == typeof(val));
     import std.meta;
 
     static assert(allSatisfy!(isRegularType, Args));
@@ -155,10 +157,11 @@ mixin template CHOICES(alias field, Args...) {
 ///   Args = the minimum and the maximum in numeric type
 mixin template RANGE(alias field, Args...) {
     static assert(Args.length > 1);
-    alias FType = typeof(field);
-    static assert(is(FType.InnerType == int) || is(FType.InnerType == double));
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(is(___FType___CMDLINE.InnerType == int) || is(
+            ___FType___CMDLINE.InnerType == double));
     static assert(is(typeof(Args[0]) == typeof(Args[1])) && is(typeof(Args[0])));
-    static assert(is(typeof(Args[0]) : FType.InnerType) && Args[0] < Args[1]);
+    static assert(is(typeof(Args[0]) : ___FType___CMDLINE.InnerType) && Args[0] < Args[1]);
     debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MIN_ = " ~ Args[0].stringof ~ ";");
     debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MAX_ = " ~ Args[1].stringof ~ ";");
     mixin("enum RANGE_" ~ field.stringof ~ "_MIN_ = " ~ Args[0].stringof ~ ";");
@@ -169,8 +172,8 @@ mixin template RANGE(alias field, Args...) {
 /// Params:
 ///   field = the registered variadic option in the type of `OptVal`
 mixin template DISABLE_MERGE(alias field) {
-    alias FType = typeof(field);
-    static assert(FType.VARIADIC);
+    alias ___FType___CMDLINE = typeof(field);
+    static assert(___FType___CMDLINE.VARIADIC);
     debug pragma(msg, "enum DISABLE_MERGE_" ~ field.stringof ~ "_ = " ~ "true;");
     mixin("enum DISABLE_MERGE_" ~ field.stringof ~ "_ = " ~ "true;");
 }
@@ -269,6 +272,35 @@ mixin template PASS_THROUGH() {
     enum bool PASS_THROUGH_ = true;
 }
 
+/// apply `Command.exportAs` to the command line container
+///Params: 
+///     field = the field with the type of `OptVal`
+///     Flags = the new flags
+mixin template EXPORT(alias field, Flags...) {
+    import std.meta;
+    import std.traits;
+
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    enum bool ___is_str___CMDLINE__(alias arg) = isSomeString!(typeof(arg));
+    static assert(allSatisfy!(___is_str___CMDLINE__, Flags));
+    mixin("static string[] EXPORT_" ~ field.stringof ~ "_ = " ~ [Flags].stringof ~ ";");
+}
+
+/// apply `Command.exportNAs` to the command line container
+/// Params:
+///     field = the field with the type of `OptVal`, the field must be set with negate option
+///     Flags = the new flags
+mixin template EXPORT_N(alias field, Flags...) {
+    import std.meta;
+    import std.traits;
+
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    enum bool ___is_str___CMDLINE__(alias arg) = isSomeString!(typeof(arg));
+    static assert(allSatisfy!(___is_str___CMDLINE__, Flags));
+    // static assert(hasMember!(__SELF__, "NEGATE_" ~ field.stringof ~ "_"));
+    mixin("static string[] EXPORT_N_" ~ field.stringof ~ "_ = " ~ [Flags].stringof ~ ";");
+}
+
 /// enable gaining value from config file in json and set an option that specifies
 /// the directories where the config file should be
 /// Params:
@@ -285,13 +317,13 @@ mixin template CONFIG(string flags = "") {
 ///   Args = the options in the type of `OptVal`
 mixin template OPT_TO_ARG(Args...) {
     static assert(Args.length);
-    enum to_string(alias var) = var.stringof;
+    enum ___to_string___CMDLINE(alias var) = var.stringof;
     import std.meta;
 
     debug pragma(msg, "static " ~ string[Args.length].stringof ~
-            " OPT_TO_ARG_ = " ~ [staticMap!(to_string, Args)].stringof ~ ";");
+            " OPT_TO_ARG_ = " ~ [staticMap!(___to_string___CMDLINE, Args)].stringof ~ ";");
     mixin("static " ~ string[Args.length].stringof ~
-            " OPT_TO_ARG_ = " ~ [staticMap!(to_string, Args)].stringof ~ ";");
+            " OPT_TO_ARG_ = " ~ [staticMap!(___to_string___CMDLINE, Args)].stringof ~ ";");
 }
 
 /// set the default sub-command which would act like the main-command except
@@ -299,10 +331,11 @@ mixin template OPT_TO_ARG(Args...) {
 /// Params:
 ///   sub = the sub command of the command
 mixin template DEFAULT(alias sub) {
-    alias SubType = typeof(sub);
+    alias ___SubType___CMDLINE = typeof(sub);
     import std.traits;
 
-    static assert(isPointer!SubType && isOutputResult!(PointerTarget!SubType));
+    static assert(isPointer!___SubType___CMDLINE && isOutputResult!(
+            PointerTarget!___SubType___CMDLINE));
     enum DEFAULT_ = sub.stringof;
 }
 
@@ -694,6 +727,8 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     enum string frange_max = "RANGE_" ~ opt_name ~ "_MAX_";
     enum string fnegate_sh = "NEGATE_" ~ opt_name ~ '_';
     enum string fnegate_desc = "NEGATE_" ~ opt_name ~ "_DESC_";
+    enum string fexport = "EXPORT_" ~ opt_name ~ "_";
+    enum string fexport_n = "EXPORT_N_" ~ opt_name ~ "_";
     auto x = opt.makeMandatory(mandatory);
     static if (hasMember!(T, "DISABLE_MERGE_" ~ opt_name ~ '_')) {
         auto xx = opt.merge(false);
@@ -735,6 +770,13 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     }
     auto xxxxxxxxxxx = cmd.addOption(opt);
     auto xxxxxxxxxxxx = nopt ? cmd.addOption(nopt) : cmd;
+    static if (hasStaticMember!(T, fexport)) {
+        auto xxxxxxxxxxxxx = cmd.exportAs(opt_name, getMember!(T, fexport));
+    }
+    static if (hasStaticMember!(T, fexport_n)) {
+        auto xxxxxxxxxxxxxx = cmd.exportNAs(opt_name, getMember!(T, fexport_n));
+    }
+    // 14 x
 }
 
 mixin template SetSubCommand(alias cmd, Type) {
@@ -752,8 +794,8 @@ string _tokeytab(string from) {
 }
 
 // mixin template IMPLIES(alias field, string key, alias val) {
-//     alias FType = typeof(field);
-//     static assert(__CMDLINE_EXT_isInnerOptValField__!FType && !is(FType.InnerType == bool));
+//     alias ___FType___CMDLINE = typeof(field);
+//     static assert(__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE && !is(___FType___CMDLINE.InnerType == bool));
 //     static assert(isOptionValueType!(typeof(val)));
 //     debug pragma(msg, "static " ~ typeof(val)
 //             .stringof ~
@@ -767,7 +809,7 @@ string _tokeytab(string from) {
 
 // mixin template IMPLIES_BOOL(alias field, Args...) {
 //     static assert(Args.length);
-//     alias FType = typeof(field);
+//     alias ___FType___CMDLINE = typeof(field);
 //     static assert(allSatisfy!(isSomeString, Args));
 //     debug pragma(msg, "static " ~ typeof(
 //             Args[0])[].stringof ~

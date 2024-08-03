@@ -144,6 +144,12 @@ package:
     string[] _provide_arr = [];
     string[] _inject_arr = [];
 
+    Option[string] _import_map = null;
+    NegateOption[string] _import_n_map = null;
+
+    Option[string] _export_map = null;
+    NegateOption[string] _export_n_map = null;
+
     this(string name) {
         this._name = name;
     }
@@ -1480,9 +1486,8 @@ package:
         return is_continue;
     }
 
-    private bool init_comb(Command cmd, string arg, ref string[] _args, ref string[][string] vvm) {
+    private bool init_comb(Command cmd, string flag, string arg, ref string[] _args, ref string[][string] vvm) {
         bool is_continue = false;
-        auto flag = "-" ~ arg[1];
         if (Option opt = cmd._findOption(flag)) {
             mixin InitOptComb!(cmd, _args, opt, vvm, arg);
             is_continue = true;
@@ -1503,10 +1508,9 @@ package:
         return is_continue;
     }
 
-    private bool init_assign(Command cmd, in Captures!string cp, ref string[][string] vvm) {
+    private bool init_assign(Command cmd, string flag, string value, ref string[][string] vvm) {
         bool is_continue = false;
-        string value = cp[2];
-        if (Option opt = cmd._findOption(cp[1])) {
+        if (Option opt = cmd._findOption(flag)) {
             mixin InitOptAssign!(cmd, opt, vvm, value);
             is_continue = true;
         }
@@ -1573,7 +1577,35 @@ package:
             return true;
         }
         if (this.parent && this.parent._passThroughOptionValue) {
+            if (init_imex_command!false(arg, _args, pvvm))
+                return true;
+            if (init_imex_command!true(arg, _args, pvvm))
+                return true;
             if (init_opt(this.parent, arg, _args, pvvm))
+                return true;
+        }
+        return false;
+    }
+
+    private bool init_imex_command(bool isExport = false)(string arg, ref string[] _args, ref string[][string] pvvm) {
+        static if (isExport) {
+            Option[string] _map = this.parent._export_map;
+            NegateOption[string] _n_map = this.parent._export_n_map;
+        }
+        else {
+            Option[string] _map = this._import_map;
+            NegateOption[string] _n_map = this._import_n_map;
+        }
+        foreach (key, opt; _map) {
+            if (arg != key)
+                continue;
+            if (init_opt(this.parent, opt.shortFlag, _args, pvvm))
+                return true;
+        }
+        foreach (key, nopt; _n_map) {
+            if (arg != key)
+                continue;
+            if (init_opt(this.parent, nopt.longFlag, _args, pvvm))
                 return true;
         }
         return false;
@@ -1593,19 +1625,50 @@ package:
                 return true;
             }
         }
-        if (init_comb(this, arg, _args, vvm))
+        if (init_comb(this, flag, arg, _args, vvm))
             return true;
         if (this.parent && this.parent._passThroughOptionValue) {
-            if (init_comb(this.parent, arg, _args, pvvm))
+            if (init_imex_comb!false(flag, arg, _args, pvvm))
+                return true;
+            if (init_imex_comb!true(flag, arg, _args, pvvm))
+                return true;
+            if (init_comb(this.parent, flag, arg, _args, pvvm))
+                return true;
+        }
+        return false;
+    }
+
+    private bool init_imex_comb(bool isExport = false)(string flag, string arg,
+        ref string[] _args, ref string[][string] pvvm) {
+        static if (isExport) {
+            Option[string] _map = this.parent._export_map;
+            NegateOption[string] _n_map = this.parent._export_n_map;
+        }
+        else {
+            Option[string] _map = this._import_map;
+            NegateOption[string] _n_map = this._import_n_map;
+        }
+        foreach (key, opt; _map) {
+            if (flag != key)
+                continue;
+            if (init_comb(this.parent, opt.longFlag, arg, _args, pvvm))
+                return true;
+
+        }
+        foreach (key, nopt; _n_map) {
+            if (flag != key)
+                continue;
+            if (init_comb(this.parent, nopt.longFlag, arg, _args, pvvm))
                 return true;
         }
         return false;
     }
 
     private bool init_opt_assign(in Captures!string cp, ref string[][string] vvm, ref string[][string] pvvm) {
+        string flag = cp[1];
+        string value = cp[2];
         if (Option copt = this._configOption) {
-            if (copt.isFlag(cp[1])) {
-                string value = cp[2];
+            if (copt.isFlag(flag)) {
                 name = copt.name;
                 auto ptr = name in vvm;
                 if (ptr)
@@ -1615,10 +1678,22 @@ package:
                 return true;
             }
         }
-        if (init_assign(this, cp, vvm))
+        if (init_assign(this, flag, value, vvm))
             return true;
         if (this.parent && this.parent._passThroughOptionValue) {
-            if (init_assign(this.parent, cp, pvvm))
+            foreach (key, opt; _import_map) {
+                if (flag != key)
+                    continue;
+                if (init_assign(this.parent, opt.longFlag, value, pvvm))
+                    return true;
+            }
+            foreach (key, opt; this.parent._export_map) {
+                if (flag != key)
+                    continue;
+                if (init_assign(this.parent, opt.longFlag, value, pvvm))
+                    return true;
+            }
+            if (init_assign(this.parent, flag, value, pvvm))
                 return true;
         }
         return false;
@@ -2843,6 +2918,105 @@ public:
         return this;
     }
 
+    /// import the option flag as new flag from parent command, so that this new flag can be pased as the
+    /// the option flag of parent command. this member function aims at avoidind flag conflict between
+    /// the command and its parent command, after using `passThrough` on parent command.
+    /// the parent command must exist and parent command must have used `passThrough` and the `flag` must
+    /// be the flag of one of the parent command's option or negate option.
+    /// remeber that when parsing the new flag, the option's new flag is prior to the negate option ones.
+    /// when parsing command line option flags, imported flag is prior to exported one, and the export one is 
+    /// prior to the ordinary pass-through option flag.
+    /// `isNegate` decide whether import negate option or non-negate one, default: `false`
+    /// Params:
+    ///   flag = the flag(or name) of one of the parent command's option or negate option
+    ///   aliasFlags = the new flags
+    /// Returns: `Self` for chain call
+    Self importAs(bool isNegate = false)(string flag, string[] aliasFlags...) {
+        if (!this.parent || !this.parent._passThroughOptionValue)
+            this.error(format("cannot use member function `Command.importAs` in command `%s` for 
+                the parent command is not found or its parent 
+                command has not used member function `Command.passThrough`", this._name));
+        assert(aliasFlags.length);
+        static if (isNegate) {
+            auto flg = imExAsImpl!(NegateOption)(flag, aliasFlags);
+            enum string word = "negate ";
+        }
+        else {
+            auto flg = imExAsImpl!(Option)(flag, aliasFlags);
+            enum string word = "";
+        }
+        if (!flg)
+            this.error(format("cannot find the %soption `%s` in `Command.importAs` in command `%s`",
+                    word, flag, this._name));
+        return this;
+    }
+
+    /// import the neagte option flag, see `Command.importAs`
+    alias importNAs = importAs!true;
+
+    /// export the option flag as new flag to sub command, so that this new flag can be pased as the
+    /// the option flag of parent command. this member function aims at avoidind flag conflict between
+    /// the command and its sub command, after using `passThrough` on this command.
+    /// this function would be automatically call `Command.passThrough`.
+    /// the `flag` must be the flag of one of the command's option or negate option.
+    /// remeber that when parsing the new flag, the option's new flag is prior to the negate option ones.
+    /// when parsing command line option flags, imported flag is prior to exported one, and the export one is 
+    /// prior to the ordinary pass-through option flag.
+    /// `isNegate` decide whether export negate option or non-negate one, default: `false`
+    /// Params:
+    ///   flag = the flag(or name) of one of the command's option or negate option
+    ///   aliasFlags = the new flags
+    /// Returns: `Self` for chain call
+    Self exportAs(bool isNegate = false)(string flag, string[] aliasFlags...) {
+        assert(aliasFlags.length);
+        if (!this._passThroughOptionValue)
+            this.passThrough();
+        static if (isNegate) {
+            auto flg = imExAsImpl!(NegateOption, true)(flag, aliasFlags);
+            enum string word = "negate ";
+        }
+        else {
+            auto flg = imExAsImpl!(Option, true)(flag, aliasFlags);
+            enum string word = "";
+        }
+        if (!flg)
+            this.error(format("cannot find the %soption `%s` in `Command.exportAs` in command `%s`",
+                    word, flag, this._name));
+        return this;
+    }
+
+    /// export the neagte option flag, see `Command.exportAs`
+    alias exportNAs = exportAs!true;
+
+    private bool imExAsImpl(T, bool isExport = false)(string flag, string[] aliasFlags...)
+            if (is(T == Option) || is(T == NegateOption)) {
+        static if (is(T == Option)) {
+            alias find_opt(alias cmd) = cmd._findOption;
+            static if (isExport)
+                alias _map = this._export_map;
+            else
+                alias _map = this._import_map;
+        }
+        else {
+            alias find_opt(alias cmd) = cmd._findNegateOption;
+            static if (isExport)
+                alias _map = this._export_n_map;
+            else
+                alias _map = this._import_n_map;
+        }
+        if (T opt = find_opt!(this)(flag)) {
+            auto tmp = aliasFlags.uniq;
+            if (_map is null) {
+                _map = tmp.map!(f => tuple(f, opt)).assocArray;
+                return true;
+            }
+            tmp.filter!(f => _map.byKey.count(f) == 0)
+                .each!((f) { _map[f] = opt; });
+            return true;
+        }
+        return false;
+    }
+
 package:
     void _exitErr(string msg, string code = "") const {
         this._outputConfiguration.writeErr("ERROR:\t" ~ msg ~ " " ~ code ~ "\n");
@@ -2966,7 +3140,6 @@ unittest {
     // cmd.emit("command:version");
     // cmd.emit("option:version");
 }
-
 
 /// create a command by name
 Command createCommand(string name) {

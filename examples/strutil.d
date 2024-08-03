@@ -29,6 +29,9 @@ mixin template ConfigCmd() {
     mixin DEFAULT!(greet, "hi!");
 
     mixin NEGATE!(greet, "-G", "opposite to `--greet`");
+
+    mixin EXPORT!(greet, "-x", "-y", "-z", "--xyz");
+    mixin EXPORT_N!(greet, "-X", "-Y", "-Z", "--XYZ");
 }
 
 mixin template ConfigSplitCmd() {
