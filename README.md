@@ -70,6 +70,53 @@ $ str_util join "maly" "jacob" # join a strings with ","
 $ str_util join "maly" "jacob" -s " " # join a strings with " "`
 ```
 
+By the way, here is another way to achieve this little command line program below, and the main comamnd name is `strutil` instead of `str_util`:
+
+```d
+module examples.strutil;
+
+import std.stdio;
+import std.string;
+import cmdline;
+
+struct StrutilResult {
+    mixin DESC!("CLI to some string utilities");
+    mixin VERSION!("0.0.1");
+    JoinResult* joinSub;
+    SplitResult* splitSub;
+}
+
+struct SplitResult {
+    mixin DESC!("Split a string into substrings and display as an array.");
+    ArgVal!string str;
+    mixin DESC!(str, "string to split");
+    OptVal!(string, "-s <char>") separator;
+    mixin DESC!(separator, "separator character");
+    mixin DEFAULT!(separator, ",");
+
+    void action() {
+        writeln(split(str.get, separator.get));
+    }
+}
+
+struct JoinResult {
+    mixin DESC!("Join the command-arguments into a single string.");
+    ArgVal!(string[]) strs;
+    mixin DESC!(strs, "one or more string");
+    OptVal!(string, "-s <char>") separator;
+    mixin DESC!(separator, "separator character");
+    mixin DEFAULT!(separator, ",");
+
+    void action() {
+        writeln(strs.get.join(separator.get));
+    }
+}
+
+void main(in string[] argv) {
+    argv.run!StrutilResult;
+}
+```
+
 [Here is the documentations in html](./doc/package.html), and you can read it by running it in browser.
 
 ## Options
