@@ -1,6 +1,6 @@
 # d-cmdline
 
-**A command line tool library to help construct a command line application easily.**
+**A tool library similar to commanderjs in Dlang to help parse command line arguments and options.**
 
 **Manly of the content in this library, including API design and interal implementation,  is drawn from learning from [commanderjs](https://github.com/tj/commander.js.git).**
 
