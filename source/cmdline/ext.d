@@ -272,6 +272,16 @@ mixin template PASS_THROUGH() {
     enum bool PASS_THROUGH_ = true;
 }
 
+/// add custom help text before command help text
+mixin template HELP_TEXT_BEFORE(string text) {
+    enum HELP_TEXT_BEFORE_ = text;
+}
+
+/// add custom help text after command help text
+mixin template HELP_TEXT_AFTER(string text) {
+    enum HELP_TEXT_AFTER_ = text;
+}
+
 /// apply `Command.exportAs` to the command line container
 ///Params: 
 ///     field = the field with the type of `OptVal`
@@ -365,6 +375,42 @@ mixin template END() {
         if (this.__PARENT_STRING_OF__ != T.stringof)
             return null;
         return cast(T*) this.__PARENT__;
+    }
+
+    // init opt_to_arg, export, export_n from mxin DEF
+    enum __IS_FIELD_A_NAME__(string name) = name.length > 18
+            && name[0 .. 18] == "__CMDLINE_FIELD_A_";
+    enum __IS_FIELD_E_NAME__(string name) = name.length > 18
+            && name[0 .. 18] == "__CMDLINE_FIELD_E_";
+    enum __IS_FIELD_N_NAME__(string name) = name.length > 18
+            && name[0 .. 18] == "__CMDLINE_FIELD_N_";
+
+    enum __GET_FIELD_NAME__(string name) = name[18 .. $];
+    alias __GET_FIELD_FLAGS__(string name) = __traits(getMember, __SELF__, name);
+
+    alias __OPT_A_NAMES__ = staticMap!(__GET_FIELD_NAME__, Filter!(__IS_FIELD_A_NAME__, __traits(allMembers, __SELF__)));
+    alias __OPT_E_NAMES__ = staticMap!(__GET_FIELD_NAME__, Filter!(__IS_FIELD_E_NAME__, __traits(allMembers, __SELF__)));
+    alias __OPT_N_NAMES__ = staticMap!(__GET_FIELD_NAME__, Filter!(__IS_FIELD_N_NAME__, __traits(allMembers, __SELF__)));
+
+    static if (__OPT_A_NAMES__.length) {
+        mixin("static " ~ string[__OPT_A_NAMES__.length].stringof ~
+            " OPT_TO_ARG_ = " ~ [__OPT_A_NAMES__].stringof ~ ";");
+    }
+
+    static if(__OPT_E_NAMES__.length) {
+        alias __OPT_E_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_E_NAME__, __traits(allMembers, __SELF__)));
+        debug pragma(msg, __OPT_E_FLAGS__);
+        static foreach(idx, nm; __OPT_E_NAMES__) {
+            mixin("static string[] EXPORT_" ~ nm ~ "_ = " ~ [__OPT_E_FLAGS__].stringof ~ ";");
+        }
+    }
+
+    static if(__OPT_N_NAMES__.length) {
+        alias __OPT_N_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_N_NAME__, __traits(allMembers, __SELF__)));
+        debug pragma(msg, __OPT_N_FLAGS__);
+        static foreach(idx, nm; __OPT_N_NAMES__) {
+            mixin("static string[] EXPORT_N_" ~ nm ~ "_ = " ~ [__OPT_N_FLAGS__].stringof ~ ";");
+        }
     }
 }
 
@@ -521,6 +567,213 @@ struct OptVal(T, string shortAndVal, bool isMandatory = false) {
     }
 }
 
+/// use for defining a command line argument
+/// Params:
+///   name = the argument's name
+///   T = the type of argument
+///   Args = the configs
+mixin template DEF_ARG(string name, T, Args...) {
+    mixin DEF!(name, T, Args);
+}
+
+/// use for defining a command line option
+/// Params:
+///   name = the name of option
+///   T = the type of option
+///   flag = the flag of option wihout long-flag
+///   Args = the configs
+mixin template DEF_OPT(string name, T, string flag, Args...) {
+    mixin DEF!(name, T, Flag_d!flag, Args);
+}
+
+/// the basic version of both `DEF_ARG` and `DEF_OPT`
+/// Params:
+///   name = the name of argument or option
+///   T = the type of argument or option
+///   Args = the configs
+mixin template DEF(string name, T, Args...) {
+    import std.meta;
+
+    static assert(allSatisfy!(__CMDLINE_isFieldDef__, Args));
+    // static if (Args.length > 0 && Args[0].__CMDLINE_FIELD_DEF__ == -1) {
+    //     mixin("OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\")" ~ name ~ ";");
+    // }
+    // else {
+    //     mixin("ArgVal!(" ~ T.stringof ~ ")" ~ name ~ ";");
+    // }
+
+    static if (!is(__CMDLINE_getFiledById__!(-2, Args) == void)) {
+        mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ true.stringof ~ ";");
+    }
+    else {
+        mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ false.stringof ~ ";");        
+    }
+
+    static if (!is(__CMDLINE_getFiledById__!(-1, Args) == void)) {
+        mixin("OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\", "
+            ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+        debug pragma(msg, "OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\", "
+            ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+    }
+    else {
+        mixin("ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+        debug pragma(msg, "ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+    }
+
+    mixin("alias " ~ "__CMDLINE_FIELD_F_" ~ name ~ "= " ~ name ~ ";");
+
+    static foreach (decl; Args) {
+        static if (decl.__CMDLINE_FIELD_DEF__ == 0) {
+            mixin DESC!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 1) {
+            mixin RANGE!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 2) {
+            mixin CHOICES!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 3) {
+            mixin DEFAULT!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 4) {
+            mixin PRESET!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 5) {
+            mixin ENV!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 6) {
+            mixin NEGATE!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 7) {
+            mixin HIDE!(mixin("__CMDLINE_FIELD_" ~ name));
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 8) {
+            mixin DISABLE_MERGE!(mixin("__CMDLINE_FIELD_" ~ name));
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 9) {
+            mixin("enum " ~ "__CMDLINE_FIELD_A_" ~ name ~ " = 1;");
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 10) {
+            mixin("alias " ~ "__CMDLINE_FIELD_E_" ~ name ~ " = decl.args;");
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 11) {
+            mixin("alias " ~ "__CMDLINE_FIELD_N_" ~ name ~ " = decl.args;");
+        }
+    }
+}
+
+/// used inside the bracket of `DEF` to set the option mandatory or set the argument optional
+struct Optional_d {
+    enum __CMDLINE_FIELD_DEF__ = -2;
+}
+
+/// used inside the bracket of `DEF` to set the flag of an option
+struct Flag_d(alias flag) {
+    enum __CMDLINE_FIELD_DEF__ = -1;
+    alias args = flag;
+}
+
+/// used inside the bracket of `DEF`, `DEF_ARG` and `DEF_OPT` to set the desc of an option or an argument
+struct Desc_d(alias desc) {
+    enum __CMDLINE_FIELD_DEF__ = 0;
+    alias args = desc;
+}
+
+/// used inside the bracket of `DEF`, `DEF_ARG` and `DEF_OPT` to set the range of an option or an argument
+struct Range_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 1;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_ARG` and `DEF_OPT` to set the choices of an option or an argument
+struct Choices_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 2;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_ARG` and `DEF_OPT` to set the default value of an option or an argument
+struct Default_d(alias val) {
+    enum __CMDLINE_FIELD_DEF__ = 3;
+    alias args = val;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to set the preset value of an option
+struct Preset_d(alias val) {
+    enum __CMDLINE_FIELD_DEF__ = 4;
+    alias args = val;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to set the value from environment of an option
+struct Env_d(alias envKey) {
+    enum __CMDLINE_FIELD_DEF__ = 5;
+    alias args = envKey;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to set the negate option of an option
+struct Negate_d(alias shortFlag, alias desc = "") {
+    enum __CMDLINE_FIELD_DEF__ = 6;
+    alias args = AliasSeq!(shortFlag, desc);
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to hide an option from help info
+struct Hide_d {
+    enum __CMDLINE_FIELD_DEF__ = 7;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to disable the merge feature of variadic option
+struct DisableMerge_d {
+    enum __CMDLINE_FIELD_DEF__ = 8;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT` to make an option act like an argument
+struct ToArg_d {
+    enum __CMDLINE_FIELD_DEF__ = 9;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `EXPORT`
+struct Export_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 10;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `EXPORT_N`
+struct N_Export_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 11;
+    alias args = Args;
+}
+
+enum __CMDLINE_isFieldDef__(T) = hasMember!(T, "__CMDLINE_FIELD_DEF__");
+template __CMDLINE_getFiledById__(int id, Types...) {
+    enum __XX(T) = T.__CMDLINE_FIELD_DEF__ == id;
+    alias tmp = Filter!(__XX, Types);
+    static if (tmp.length)
+        alias __CMDLINE_getFiledById__ = tmp[0];
+    else
+        alias __CMDLINE_getFiledById__ = void;
+}  
+
+
 private alias getMember(alias T, string flag) = __traits(getMember, T, flag);
 
 /// construct the command line program without action callback
@@ -567,6 +820,12 @@ Command construct(T)() if (isOutputResult!T) {
     }
     static if (hasMember!(T, "ALIAS_")) {
         cmd.aliasName(T.ALIAS_);
+    }
+    static if(hasMember!(T, "HELP_TEXT_BEFORE_")) {
+        cmd.addHelpText(AddHelpPos.Before, T.HELP_TEXT_BEFORE_);
+    }
+    static if(hasMember!(T, "HELP_TEXT_AFTER_")) {
+        cmd.addHelpText(AddHelpPos.Before, T.HELP_TEXT_AFTER_);
     }
     static foreach (index, Type; ftypes) {
         static if (__CMDLINE_EXT_isInnerArgValField__!Type) {

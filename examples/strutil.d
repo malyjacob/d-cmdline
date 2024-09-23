@@ -10,6 +10,7 @@ import std.process;
 import cmdline;
 
 mixin template ConfigCmd() {
+    mixin BEGIN;
     mixin DESC!("CLI to some string utilities");
     mixin VERSION!("0.0.1");
 
@@ -20,18 +21,24 @@ mixin template ConfigCmd() {
     SplitResult* splitSub;
     ReplaceResult* replaceSub;
 
-    OptVal!(bool, "-f") flag;
-    mixin DESC_OPT!(flag, "the global flag");
+    mixin DEF!(
+        "flag", bool,
+        Flag_d!"-f",
+        Desc_d!"the global flag"
+    );
 
-    OptVal!(string, "-g [greeting]") greet;
-    mixin DESC_OPT!(greet, "set the greeting string");
-    mixin PRESET!(greet, "hello!");
-    mixin DEFAULT!(greet, "hi!");
+    mixin DEF!(
+        "greet", string,
+        Flag_d!"-g [greeting]",
+        Desc_d!"set the greeting string",
+        Default_d!"hi!",
+        Preset_d!"hello!",
+        Negate_d!("-G", "opposite to `--greet`"),
+        Export_d!("-x", "-y", "-z", "--xyz"),
+        N_Export_d!("-X", "-Y", "-Z", "--XYZ")
+    );
 
-    mixin NEGATE!(greet, "-G", "opposite to `--greet`");
-
-    mixin EXPORT!(greet, "-x", "-y", "-z", "--xyz");
-    mixin EXPORT_N!(greet, "-X", "-Y", "-Z", "--XYZ");
+    mixin END;
 }
 
 mixin template ConfigSplitCmd() {
@@ -39,14 +46,19 @@ mixin template ConfigSplitCmd() {
     mixin ALIAS!("spl");
     mixin DESC!("Split a string into substrings and display as an array.");
 
-    ArgVal!string str;
-    mixin DESC!(str, "string to split");
+    mixin DEF!(
+        "str", string,
+        Desc_d!"string to split"
+    );
 
-    OptVal!(string, "-s <char>") separator;
-    mixin DESC!(separator, "separator character");
-    mixin DEFAULT!(separator, ",");
+    mixin DEF!(
+        "separator", string,
+        Flag_d!"-s <char>",
+        Desc_d!"separator character",
+        Default_d!",",
+        ToArg_d,
+    );
 
-    mixin OPT_TO_ARG!(separator);
     mixin END;
 
     void action() {
@@ -64,12 +76,18 @@ mixin template ConfigJoinCmd() {
     mixin ALIAS!("jr");
     mixin DESC!("Join the command-arguments into a single string.");
 
-    ArgVal!(string[]) strs;
-    mixin DESC!(strs, "one or more string");
+    mixin DEF!(
+        "strs", string[],
+        Desc_d!"one or more string"
+    );
 
-    OptVal!(string, "-s <char>") separator;
-    mixin DESC!(separator, "separator character");
-    mixin DEFAULT!(separator, ",");
+    mixin DEF!(
+        "separator", string,
+        Flag_d!"-s <char>",
+        Desc_d!"separator character",
+        Default_d!","
+    );
+
     mixin END;
 
     void action() {
@@ -87,15 +105,22 @@ mixin template ConfigReplaceCmd() {
     mixin ALIAS!("rpl");
     mixin DESC!("Replace the specified string with new string on a string");
 
-    ArgVal!string str;
-    mixin DESC!(str, "the string that would be mutated");
+    mixin DEF_ARG!(
+        "str", string,
+        Desc_d!"the string that would be mutated"
+    );
 
-    OptVal!(string, "-p <ptr>") ptr;
-    mixin DESC_OPT!(ptr, "the pattern to search for");
+    mixin DEF_OPT!(
+        "ptr", string, "-p <ptr>",
+        Desc_d!"the pattern to search for",
+        ToArg_d
+    );
 
-    OptVal!(string, "-r <replacent>") rpl;
-    mixin DEFAULT!(rpl, "");
-    mixin DESC_OPT!(rpl, "the replacent string");
+    mixin DEF_OPT!(
+        "rpl", string, "-r <replacent>",
+        Desc_d!"the replacent string",
+        ToArg_d
+    );
 
     OptVal!(bool, "-i") igc;
     mixin DESC_OPT!(igc, "ignore the lower and upper cases");
@@ -109,7 +134,6 @@ mixin template ConfigReplaceCmd() {
     OptVal!(bool, "-c") cmp;
     mixin DESC_OPT!(cmp, "show the comparision");
 
-    mixin OPT_TO_ARG!(ptr, rpl);
     mixin END;
 
     void action() {
@@ -162,95 +186,3 @@ struct StrutilResult {
 void main(in string[] argv) {
     argv.run!StrutilResult;
 }
-
-// void main(in string[] argv) {
-//     StrutilResult output = parse!StrutilResult(argv);
-//     if (const(JoinResult)* jr = output.subResult!JoinResult) {
-//         jr.action(jr.separator.get, jr.strs.get);
-//     }
-//     else if (const(SplitResult)* spl = output.subResult!SplitResult) {
-//         spl.action(spl.separator.get, spl.str.get);
-//     }
-//     else if (const(ReplaceResult)* rpl = output.subResult!ReplaceResult) {
-//         string str = rpl.str.get;
-//         string ptr = rpl.ptr.get;
-//         string rstr = rpl.rpl.get;
-//         string igc = rpl.igc.isValid ? "i" : "";
-//         string glb = rpl.glb.isValid ? "g" : "";
-//         string mlt = rpl.mlt.isValid ? "m" : "";
-//         version (Windows) {
-//             enum os_num = 0;
-//         }
-//         else version (Posix) {
-//             enum os_num = 1;
-//         }
-//         bool is_cmp = rpl.cmp.isValid && os_num;
-//         auto fmt = `\033[36m%s\033[0m`;
-//         auto fn = (Captures!string m) {
-//             string tmp = '_'.repeat.take(m.hit.length).array;
-//             return rstr.length
-//                 ? (is_cmp ? format(fmt, rstr) : rstr) : (is_cmp ? format(fmt, tmp) : tmp);
-//         };
-//         auto pattern = regex(ptr, join([igc, glb, mlt], ""));
-//         string new_str = replace!(fn)(str, pattern);
-//         auto ostr = is_cmp ? format("echo -e \"%s\"", new_str) : format("echo \"%s\"", new_str); 
-//         auto result = executeShell(ostr);
-//         write(result.output);
-//     }
-// }
-
-// unittest {
-//     static struct MyStruct {
-//         static void* em;
-
-//         void action(StrutilResult* parent) {
-//             assert(parent.joinSub is null);
-//             assert(parent.replaceSub is null);
-//             assert(parent.splitSub is null);
-//             writeln("action");
-//         }
-
-//         void run() {
-//             writeln("run");
-//             action(cast(StrutilResult*) this.em);
-//         }
-//     }
-
-//     MyStruct ms;
-//     ms.em = new StrutilResult;
-//     ms.run;
-//     string[] argv = ["strutil", "spl"];
-//     StrutilResult* output = parse!StrutilResult(argv);
-//     if (JoinResult* jr = output.subResult!JoinResult) {
-//         jr.action(jr.separator.get, jr.strs.get);
-//     }
-//     else if (const(SplitResult)* spl = output.subResult!SplitResult) {
-//         spl.action(spl.separator.get, spl.str.get);
-//     }
-//     else if (const(ReplaceResult)* rpl = output.subResult!ReplaceResult) {
-//         string str = rpl.str.get;
-//         string ptr = rpl.ptr.get;
-//         string rstr = rpl.rpl.get;
-//         string igc = rpl.igc.isValid ? "i" : "";
-//         string glb = rpl.glb.isValid ? "g" : "";
-//         string mlt = rpl.mlt.isValid ? "m" : "";
-//         version (Windows) {
-//             enum os_num = 0;
-//         }
-//         else version (Posix) {
-//             enum os_num = 1;
-//         }
-//         bool is_cmp = rpl.cmp.isValid && os_num;
-//         auto fmt = `\033[36m%s\033[0m`;
-//         auto fn = (Captures!string m) {
-//             string tmp = '_'.repeat.take(m.hit.length).array;
-//             return rstr.length
-//                 ? (is_cmp ? format(fmt, rstr) : rstr) : (is_cmp ? format(fmt, tmp) : tmp);
-//         };
-//         auto pattern = regex(ptr, join([igc, glb, mlt], ""));
-//         string new_str = replace!(fn)(str, pattern);
-//         auto ostr = is_cmp ? format("echo -e \"%s\"", new_str) : format("echo \"%s\"", new_str);
-//         auto result = executeShell(ostr);
-//         write(result.output);
-//     }
-// }
