@@ -17,9 +17,7 @@ mixin template ConfigCmd() {
     mixin CONFIG;
     mixin PASS_THROUGH;
 
-    JoinResult* joinSub;
-    SplitResult* splitSub;
-    ReplaceResult* replaceSub;
+    mixin SUB_CMD!(JoinResult, SplitResult, ReplaceResult);
 
     mixin DEF!(
         "flag", bool,

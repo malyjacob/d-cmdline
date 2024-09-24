@@ -349,6 +349,19 @@ mixin template DEFAULT(alias sub) {
     enum DEFAULT_ = sub.stringof;
 }
 
+/// set sub commands
+/// Params:
+///   SubCmds = the sub command containers that satisfies with `isOutputResult`
+mixin template SUB_CMD(SubCmds...) {
+    import std.meta;
+
+    static assert(SubCmds.length && allSatisfy!(isOutputResult, SubCmds));
+    static foreach (sub; SubCmds) {
+        debug pragma(msg, sub.stringof ~ "* " ~ (sub.stringof)[0 .. $ - 6] ~ "Sub;");
+        mixin(sub.stringof ~ "* " ~ (sub.stringof)[0 .. $ - 6] ~ "Sub;");
+    }
+}
+
 /// prepare for the future use of function `ready` and `getParent`, which must be embedded at the top
 /// of struct domain with `END` mixin-marco at the end of this struct domain.
 mixin template BEGIN() {
@@ -379,11 +392,11 @@ mixin template END() {
 
     // init opt_to_arg, export, export_n from mxin DEF
     enum __IS_FIELD_A_NAME__(string name) = name.length > 18
-            && name[0 .. 18] == "__CMDLINE_FIELD_A_";
+        && name[0 .. 18] == "__CMDLINE_FIELD_A_";
     enum __IS_FIELD_E_NAME__(string name) = name.length > 18
-            && name[0 .. 18] == "__CMDLINE_FIELD_E_";
+        && name[0 .. 18] == "__CMDLINE_FIELD_E_";
     enum __IS_FIELD_N_NAME__(string name) = name.length > 18
-            && name[0 .. 18] == "__CMDLINE_FIELD_N_";
+        && name[0 .. 18] == "__CMDLINE_FIELD_N_";
 
     enum __GET_FIELD_NAME__(string name) = name[18 .. $];
     alias __GET_FIELD_FLAGS__(string name) = __traits(getMember, __SELF__, name);
@@ -394,21 +407,21 @@ mixin template END() {
 
     static if (__OPT_A_NAMES__.length) {
         mixin("static " ~ string[__OPT_A_NAMES__.length].stringof ~
-            " OPT_TO_ARG_ = " ~ [__OPT_A_NAMES__].stringof ~ ";");
+                " OPT_TO_ARG_ = " ~ [__OPT_A_NAMES__].stringof ~ ";");
     }
 
-    static if(__OPT_E_NAMES__.length) {
+    static if (__OPT_E_NAMES__.length) {
         alias __OPT_E_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_E_NAME__, __traits(allMembers, __SELF__)));
         debug pragma(msg, __OPT_E_FLAGS__);
-        static foreach(idx, nm; __OPT_E_NAMES__) {
+        static foreach (idx, nm; __OPT_E_NAMES__) {
             mixin("static string[] EXPORT_" ~ nm ~ "_ = " ~ [__OPT_E_FLAGS__].stringof ~ ";");
         }
     }
 
-    static if(__OPT_N_NAMES__.length) {
+    static if (__OPT_N_NAMES__.length) {
         alias __OPT_N_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_N_NAME__, __traits(allMembers, __SELF__)));
         debug pragma(msg, __OPT_N_FLAGS__);
-        static foreach(idx, nm; __OPT_N_NAMES__) {
+        static foreach (idx, nm; __OPT_N_NAMES__) {
             mixin("static string[] EXPORT_N_" ~ nm ~ "_ = " ~ [__OPT_N_FLAGS__].stringof ~ ";");
         }
     }
@@ -600,14 +613,14 @@ mixin template DEF(string name, T, Args...) {
         mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ true.stringof ~ ";");
     }
     else {
-        mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ false.stringof ~ ";");        
+        mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ false.stringof ~ ";");
     }
 
     static if (!is(__CMDLINE_getFiledById__!(-1, Args) == void)) {
         mixin("OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\", "
-            ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+                ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
         debug pragma(msg, "OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\", "
-            ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+                ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
     }
     else {
         mixin("ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
@@ -765,8 +778,7 @@ template __CMDLINE_getFiledById__(int id, Types...) {
         alias __CMDLINE_getFiledById__ = tmp[0];
     else
         alias __CMDLINE_getFiledById__ = void;
-}  
-
+}
 
 private alias getMember(alias T, string flag) = __traits(getMember, T, flag);
 
@@ -815,10 +827,10 @@ Command construct(T)() if (isOutputResult!T) {
     static if (hasMember!(T, "ALIAS_")) {
         cmd.aliasName(T.ALIAS_);
     }
-    static if(hasMember!(T, "HELP_TEXT_BEFORE_")) {
+    static if (hasMember!(T, "HELP_TEXT_BEFORE_")) {
         cmd.addHelpText(AddHelpPos.Before, T.HELP_TEXT_BEFORE_);
     }
-    static if(hasMember!(T, "HELP_TEXT_AFTER_")) {
+    static if (hasMember!(T, "HELP_TEXT_AFTER_")) {
         cmd.addHelpText(AddHelpPos.After, T.HELP_TEXT_AFTER_);
     }
     static foreach (index, Type; ftypes) {
