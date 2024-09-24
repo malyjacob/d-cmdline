@@ -62,37 +62,33 @@ struct CalcResult {
     mixin DESC!"simple calculator for baisc binary computation";
     mixin VERSION!"1.0.1";
 
-    mixin DEF!(
-        "first", double,
-        Desc_d!"the first operand",
-        Range_d!(0.0, 1024.0)
-    );
+    mixin SHOW_HELP_AFTER_ERR;
+    mixin DISALLOW_EXCESS_ARGS;
 
-    mixin DEF!(
-        "second", double,
-        Desc_d!"the second operand",
-        Range_d!(0.0, 1024.0)
-    );
-
-    mixin DEF!(
-        "operator", string,
-        Flag_d!"-o [op]",
+    mixin DEF_OPT!(
+        "operator", string, "-o [op]",
         Desc_d!"the operator of two double number",
         Choices_d!("add", "sub", "multi", "div"),
         Preset_d!"multi",
         Default_d!"add",
-        ToArg_d
+        ToArg_d,
     );
 
-    mixin HELP_TEXT_AFTER!(`
-    Examples:
-        $ calc 12 13
-        $ calc 23 45 -o
-        $ calc 23.3 45 -o -
-        $ calc 23.3 27.3 -o /
-        $ calc -o 23.3 45
-        $ calc -o * 23.3 45
-    `);
+    mixin DEF_OPT!(
+        "first", double, "-f <fnum>",
+        Desc_d!"the first operand",
+        Range_d!(0.0, 1024.0),
+        Default_d!0.0,
+        ToArg_d,
+    );
+
+    mixin DEF_OPT!(
+        "second", double, "-s <snum>",
+        Desc_d!"the second operand",
+        Range_d!(0.0, 1024.0),
+        Default_d!1.0,
+        ToArg_d,
+    );
 
     mixin END;
 
@@ -120,7 +116,6 @@ struct CalcResult {
             writefln("%4.4f %s %4.4f = %4.4f", f, op_map[op], s, f / s);
             break;
         default:
-            stderr.writeln("");
             break;
         }
     }

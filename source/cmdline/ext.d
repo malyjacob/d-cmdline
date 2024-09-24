@@ -595,12 +595,6 @@ mixin template DEF(string name, T, Args...) {
     import std.meta;
 
     static assert(allSatisfy!(__CMDLINE_isFieldDef__, Args));
-    // static if (Args.length > 0 && Args[0].__CMDLINE_FIELD_DEF__ == -1) {
-    //     mixin("OptVal!(" ~ T.stringof ~ ", \"" ~ Args[0].args ~ "\")" ~ name ~ ";");
-    // }
-    // else {
-    //     mixin("ArgVal!(" ~ T.stringof ~ ")" ~ name ~ ";");
-    // }
 
     static if (!is(__CMDLINE_getFiledById__!(-2, Args) == void)) {
         mixin("enum " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ " = " ~ true.stringof ~ ";");
@@ -666,10 +660,10 @@ mixin template DEF(string name, T, Args...) {
             );
         }
         else static if (decl.__CMDLINE_FIELD_DEF__ == 7) {
-            mixin HIDE!(mixin("__CMDLINE_FIELD_" ~ name));
+            mixin HIDE!(mixin("__CMDLINE_FIELD_F_" ~ name));
         }
         else static if (decl.__CMDLINE_FIELD_DEF__ == 8) {
-            mixin DISABLE_MERGE!(mixin("__CMDLINE_FIELD_" ~ name));
+            mixin DISABLE_MERGE!(mixin("__CMDLINE_FIELD_F_" ~ name));
         }
         else static if (decl.__CMDLINE_FIELD_DEF__ == 9) {
             mixin("enum " ~ "__CMDLINE_FIELD_A_" ~ name ~ " = 1;");
@@ -825,7 +819,7 @@ Command construct(T)() if (isOutputResult!T) {
         cmd.addHelpText(AddHelpPos.Before, T.HELP_TEXT_BEFORE_);
     }
     static if(hasMember!(T, "HELP_TEXT_AFTER_")) {
-        cmd.addHelpText(AddHelpPos.Before, T.HELP_TEXT_AFTER_);
+        cmd.addHelpText(AddHelpPos.After, T.HELP_TEXT_AFTER_);
     }
     static foreach (index, Type; ftypes) {
         static if (__CMDLINE_EXT_isInnerArgValField__!Type) {
