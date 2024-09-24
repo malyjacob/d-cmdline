@@ -82,8 +82,7 @@ import cmdline;
 struct StrutilResult {
     mixin DESC!("CLI to some string utilities");
     mixin VERSION!("0.0.1");
-    JoinResult* joinSub;
-    SplitResult* splitSub;
+    mixin SUB_CMD!(SplitResult, JoinResult);
 }
 
 struct SplitResult {
