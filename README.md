@@ -88,12 +88,15 @@ struct StrutilResult {
 
 struct SplitResult {
     mixin DESC!("Split a string into substrings and display as an array.");
-    ArgVal!string str;
-    mixin DESC!(str, "string to split");
-    OptVal!(string, "-s <char>") separator;
-    mixin DESC!(separator, "separator character");
-    mixin DEFAULT!(separator, ",");
-
+    mixin DEF_ARG!(
+        "str", string,
+        Desc_d!"string to split",
+    );
+    mixin DEF_OPT!(
+        "separator", string, "-s <char>",
+        Desc_d!"separator character",
+        Default_d!","
+    );
     void action() {
         writeln(split(str.get, separator.get));
     }
@@ -101,12 +104,15 @@ struct SplitResult {
 
 struct JoinResult {
     mixin DESC!("Join the command-arguments into a single string.");
-    ArgVal!(string[]) strs;
-    mixin DESC!(strs, "one or more string");
-    OptVal!(string, "-s <char>") separator;
-    mixin DESC!(separator, "separator character");
-    mixin DEFAULT!(separator, ",");
-
+    mixin DEF_ARG!(
+        "strs", string[],
+        Desc_d!"one or more string"
+    );
+    mixin DEF_OPT!(
+        "separator", string, "-s <char>",
+        Desc_d!"separator character",
+        Default_d!","
+    );
     void action() {
         writeln(strs.get.join(separator.get));
     }
