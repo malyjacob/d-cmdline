@@ -35,9 +35,9 @@ enum __CMDLINE_EXT_isInnerValFieldOrResult__(T) = __CMDLINE_EXT_isInnerValField_
 /// check whether a type is the struct that can be the  
 /// container to store the parsed value from command line. 
 enum isOutputResult(T) = is(T == struct)
-    && T.stringof.length > 6 && (T.stringof)[$ - 6 .. $] == "Result"
-    && FieldTypeTuple!T.length > 0
-    && anySatisfy!(__CMDLINE_EXT_isInnerValFieldOrResult__, FieldTypeTuple!T);
+    && T.stringof.length > 6 && (T.stringof)[$ - 6 .. $] == "Result";
+// && (FieldTypeTuple!T.length > 0 ? )
+// && anySatisfy!(__CMDLINE_EXT_isInnerValFieldOrResult__, FieldTypeTuple!T);
 
 /// Add description to a registered argument.
 /// Params:
@@ -282,6 +282,34 @@ mixin template HELP_TEXT_AFTER(string text) {
     enum HELP_TEXT_AFTER_ = text;
 }
 
+/// sort sub commands when invoke help
+mixin template SORT_SUB_CMDS() {
+    enum SORT_SUB_CMDS_ = true;
+}
+
+/// sort options when invoke help
+mixin template SORT_OPTS() {
+    enum SORT_OPTS_ = true;
+}
+
+/// show the global options when invoke help
+mixin template SHOW_GLOBAL_OPTS() {
+    enum SHOW_GLOBAL_OPTS_ = true;
+}
+
+mixin template EXT_SUB_CMD(string name, string desc = "", string bin = name, string dir = "./", string aliasName = "") {
+    static assert(name.length && bin.length);
+
+    // enum EXT_SUB_CMD_name_ = desc;
+    mixin("enum EXT_SUB_CMD_" ~ name ~ "_N_ = \"" ~ desc ~ "\";");
+    // enum EXT_SUB_CMD_name_bin_ = true;
+    mixin("enum EXT_SUB_CMD_" ~ name ~ "_" ~ bin ~ "_B_ = 1;");
+    // enum EXT_SUB_CMD_name_DIR_ = dir;
+    mixin("enum EXT_SUB_CMD_" ~ name ~ "_DIR_ = \"" ~ dir ~ "\";");
+    // enum EXT_SUB_CMD_name_aliasName_ = true;
+    mixin("enum EXT_SUB_CMD_" ~ name ~ "_" ~ aliasName ~ "_A_ = 1;");
+}
+
 /// apply `Command.exportAs` to the command line container
 ///Params: 
 ///     field = the field with the type of `OptVal`
@@ -339,14 +367,17 @@ mixin template OPT_TO_ARG(Args...) {
 /// set the default sub-command which would act like the main-command except
 /// `help`, `version` and `config` options and sub-command if exists.
 /// Params:
-///   sub = the sub command of the command
-mixin template DEFAULT(alias sub) {
-    alias ___SubType___CMDLINE = typeof(sub);
-    import std.traits;
+///   SubCmd = the type that statisfies `isOutResult` and be registered by `SUB_CMD` 
+mixin template DEFAULT(SubCmd) {
+    static assert(isOutputResult!SubCmd);
+    enum DEFAULT_ = (SubCmd.stringof)[0 .. $ - 6];
+}
 
-    static assert(isPointer!___SubType___CMDLINE && isOutputResult!(
-            PointerTarget!___SubType___CMDLINE));
-    enum DEFAULT_ = sub.stringof;
+/// set the default sub-command which would act like the main-command except
+/// Params:
+///   subCmdName = the sub command name
+mixin template DEFAULT(string subCmdName) {
+    enum DEFAULT_ = subCmdName;
 }
 
 /// set sub commands
@@ -690,10 +721,13 @@ mixin template DEF(string name, T, Args...) {
     }
 }
 
-/// used inside the bracket of `DEF` to set the option mandatory or set the argument optional
+/// used inside the bracket of `DEF` or `DEF_ARG` to set the argument optional
 struct Optional_d {
     enum __CMDLINE_FIELD_DEF__ = -2;
 }
+
+// used inside the bracket of `DEF` or `DEF_OPT` to set the option mandatory
+alias Mandatory_d = Optional_d;
 
 /// used inside the bracket of `DEF` to set the flag of an option
 struct Flag_d(alias flag) {
@@ -819,7 +853,7 @@ Command construct(T)() if (isOutputResult!T) {
         cmd.setConfigOption(T.CONFIG_FLAGS_);
     }
     static if (hasMember!(T, "DEFAULT_")) {
-        cmd._defaultCommandName = T.DEFAULT_;
+        cmd._defaultCommandName = _tokeytab(T.DEFAULT_);
     }
     static if (hasMember!(T, "PASS_THROUGH_")) {
         cmd._passThroughOptionValue = true;
@@ -832,6 +866,15 @@ Command construct(T)() if (isOutputResult!T) {
     }
     static if (hasMember!(T, "HELP_TEXT_AFTER_")) {
         cmd.addHelpText(AddHelpPos.After, T.HELP_TEXT_AFTER_);
+    }
+    static if (hasMember!(T, "SORT_SUB_CMDS_")) {
+        cmd.sortSubCommands;
+    }
+    static if (hasMember!(T, "SORT_OPTS_")) {
+        cmd.sortOptions;
+    }
+    static if (hasMember!(T, "SHOW_GLOBAL_OPTS_")) {
+        cmd.showGlobalOptions;
     }
     static foreach (index, Type; ftypes) {
         static if (__CMDLINE_EXT_isInnerArgValField__!Type) {
@@ -857,6 +900,30 @@ Command construct(T)() if (isOutputResult!T) {
 
         auto tmp = arr[].map!(str => _tokeytab(str)).array;
         cmd.argToOpt(tmp[0], tmp[1 .. $]);
+    }
+    enum __IS_EXT_SUB_CMD_PREFIX__(string name) = name.length > 12
+        && name[0 .. 12] == "EXT_SUB_CMD_";
+    enum __GET_EXT_SLICE__(string name, size_t begin, size_t end = 3) = name[begin .. $ - end];
+    alias __EXT_SUB_CMD_PREFIX_SEQ__ = Filter!(__IS_EXT_SUB_CMD_PREFIX__, __traits(allMembers, T));
+    static if (__EXT_SUB_CMD_PREFIX_SEQ__.length) {
+        static foreach (idx, ext; __EXT_SUB_CMD_PREFIX_SEQ__) {
+            static if (idx % 4 == 0) {
+                {
+                    enum name = __GET_EXT_SLICE__!(ext, 12);
+                    enum len = name.length + 13;
+                    enum bin = __GET_EXT_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 1], len);
+                    enum desc = getMember!(T, ext);
+                    enum dir = getMember!(T, __EXT_SUB_CMD_PREFIX_SEQ__[idx + 2]);
+                    enum aliasName = __GET_EXT_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 3], len);
+                    cmd.command(name._tokeytab, desc, [
+                        "file": bin,
+                        "dir": dir
+                    ]);
+                    static if (aliasName.length)
+                        cmd.aliasName(aliasName._tokeytab);
+                }
+            }
+        }
     }
     return cmd;
 }

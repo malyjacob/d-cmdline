@@ -305,7 +305,7 @@ public:
         }
         if (!this._externalCmdHelpFlagMap || !(cmd._name in this._externalCmdHelpFlagMap))
             this._externalCmdHelpFlagMap[cmd._name] = "--help";
-        cmd.usage(format!"run `%s %s --help` to see"(this._name, cmd._name));
+        cmd.usage(format!"run `%s %s %s` to see"(this._name, cmd._name, this._externalCmdHelpFlagMap[cmd._name]));
         cmd.parent = this;
         cmd._allowExcessArguments = true;
         cmd._showHelpAfterError = false;
@@ -1137,7 +1137,13 @@ public:
     // }
 
     package void execSubCommand(in string[] unknowns) {
-        string sub_path = buildPath(_execDir, _execFile);
+        string sub_path;
+        if (_execDir == "")
+            sub_path = _execFile;
+        else if ((_execDir.length >= 2 && _execDir[0 .. 2] == "./") || (_execDir.length >= 3 && _execDir[0 .. 3] == "../"))
+            sub_path = buildPath(dirName(thisExePath()), _execDir, _execFile);
+        else
+            sub_path = buildPath(_execDir, _execFile);
         const(string)[] inputs;
         if (!(sub_path[0] == '"' && sub_path[$ - 1] == '"') && sub_path.any!(c => c == ' ')) {
             sub_path = '"' ~ sub_path ~ '"';
@@ -1204,7 +1210,7 @@ package:
                     (str == "--help" || str == "-h"));
         };
         if (!this._defaultCommandName.empty &&
-            unknowns.all!(str => !has_cmd(str) && !has_hvopt(str))) {
+            (unknowns.length == 0 || (_findCommand(unknowns[0]) is null && unknowns.all!(str => !has_cmd(str) && !has_hvopt(str))))) {
             auto cmd = _findCommand(this._defaultCommandName);
             if (!cmd)
                 parsingError("cannot find the default sub command `"
@@ -1223,7 +1229,10 @@ package:
                 }
             }
             this._called_sub = cmd._name;
-            cmd._parseCommand(unknowns);
+            if (cmd._execHandler)
+                cmd.execSubCommand(unknowns);
+            else
+                cmd._parseCommand(unknowns);
             return;
         }
         this.parseOptionsEnv();
