@@ -875,7 +875,7 @@ struct ExportAs_d(Args...) {
 }
 
 /// used inside the bracket of `DEF`, `DEF_OPT`, see `EXPORT`
-struct Export_d  {
+struct Export_d {
     enum __CMDLINE_FIELD_DEF__ = 10;
     alias args = AliasSeq!();
 }
@@ -1020,9 +1020,9 @@ Command construct(T)() if (isOutputResult!T) {
                     enum dir = getMember!(T, __EXT_SUB_CMD_PREFIX_SEQ__[idx + 2]);
                     enum aliasName = __GET_EXT_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 3], len);
                     cmd.commandX(name._tokeytab, desc, [
-                        "file": bin,
-                        "dir": dir
-                    ]);
+                            "file": bin,
+                            "dir": dir
+                        ]);
                     static if (aliasName.length)
                         cmd.aliasName(aliasName._tokeytab);
                 }
@@ -1082,6 +1082,14 @@ void runImpl(T)(T* output) if (isOutputResult!T) {
         else {
             if (!T.__IS_SUB_CMD_CALLED__) {
                 output.action();
+            }
+            else {
+                alias fnames = FieldNameTuple!T;
+                static foreach (index, Type; Filter!(__CMDLINE_EXT_isInnerSubField__, FieldTypeTuple!T)) {
+                    if (auto sub_output = output.subResult!(PointerTarget!Type)) {
+                        runImpl(sub_output);
+                    }
+                }
             }
         }
     }
