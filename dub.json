@@ -9,7 +9,7 @@
 	"description": "A cmd line tool library",
 	"license": "MIT",
 	"name": "cmdline",
-	"version": "1.4.0",
+	"version": "1.4.1",
 	"targetName": "cmdline",
 	"targetPath": "build",
 	"targetType": "library",
