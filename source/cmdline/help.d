@@ -113,6 +113,83 @@ class Help {
         return cast(inout(NegateOption[])) visible_opts;
     }
 
+    inout(T)[string] visibleInheritOptions(T)(inout(Command) command) const
+    if (is(T == Option) || is(T == NegateOption)) {
+        static if (is(T == Option)) {
+            auto im = cast(T[string]) command._import_map;
+        }
+        else {
+            auto im = cast(T[string]) command._import_n_map;
+        }
+        T[string] ex;
+        T[string] ph;
+        if (command.parent) {
+            static if (is(T == Option)) {
+                ex = cast(T[string]) command.parent._export_map;
+                auto opt_seq = cast(T[]) command.parent._options;
+            }
+            else {
+                ex = cast(T[string]) command.parent._export_n_map;
+                auto opt_seq = cast(T[]) command.parent._negates;
+            }
+            if (command.parent._passThroughOptionValue) {
+                foreach (opt; opt_seq) {
+                    if (opt.shortFlag.length)
+                        ph[opt.shortFlag] = opt;
+                    if (opt.longFlag.length)
+                        ph[opt.longFlag] = opt;
+                }
+            }
+        }
+        T[string[]] n_im = cast(T[string[]]) mergeKeys(im);
+        typeof(n_im) n_ex = cast(T[string[]]) mergeKeys(ex);
+        typeof(n_im) n_ph = cast(T[string[]]) mergeKeys(ph);
+        typeof(n_im) imex;
+        foreach (keys, value; n_im) {
+            imex[keys] = value;
+        }
+        foreach (keys, value; n_ex) {
+            imex[keys] = value;
+        }
+        foreach (keys, value; n_ph) {
+            imex[keys] = value;
+        }
+        const(string)[][T] r_imex;
+        T[string] result;
+        foreach (keys, value; imex) {
+            if (r_imex.byKey.canFind!(v => v is value)) {
+                r_imex[value] ~= keys;
+            }
+            else {
+                r_imex[value] = keys;
+            }
+        }
+        foreach (value, keys; r_imex) {
+            if (value.hidden)
+                continue;
+            result[keys.uniq.join(", ")] = value;
+        }
+        return cast(inout(T)[string]) result;
+    }
+
+    private inout(T)[string[]] mergeKeys(T)(inout(T)[string] im) const
+    if (is(T == Option) || is(T == NegateOption)) {
+        string[][T] r_im;
+        T[string[]] n_im;
+        foreach (key, value; im) {
+            if (r_im.byKey.canFind!(v => v is value)) {
+                r_im[cast(T) value] ~= key;
+            }
+            else {
+                r_im[cast(T) value] = [key];
+            }
+        }
+        foreach (value, keys; r_im) {
+            n_im[cast(immutable string[]) keys] = value;
+        }
+        return cast(inout(T)[string[]]) n_im;
+    }
+
     /// get the list of arguments
     inout(Argument)[] visibleArguments(inout(Command) command) const {
         if (command._argsDescription) {
@@ -169,6 +246,16 @@ package:
             return max(mn, cast(int) optionTerm(opt).length);
         })(0, visibleNegateOptions(cmd));
 
+        return max(opt_len, nopt_len);
+    }
+
+    int longestInheritOptionsTermLength(in Command cmd) const {
+        int opt_len = reduce!((int mn, kv) {
+            return max(mn, cast(int) kv.key.length);
+        })(0, visibleInheritOptions!Option(cmd).byKeyValue);
+        int nopt_len = reduce!((int mn, kv) {
+            return max(mn, cast(int) kv.key.length);
+        })(0, visibleInheritOptions!NegateOption(cmd).byKeyValue);
         return max(opt_len, nopt_len);
     }
 
@@ -253,11 +340,13 @@ package:
         auto lg_gopl = longestGlobalOptionTermLength(cmd);
         auto lg_scl = longestSubcommandTermLength(cmd);
         auto lg_arl = longestArgumentTermLength(cmd);
+        auto lg_ihl = longestInheritOptionsTermLength(cmd);
         return max(
             lg_opl,
             lg_gopl,
             lg_scl,
-            lg_arl
+            lg_arl,
+            lg_ihl
         );
     }
 
@@ -312,6 +401,19 @@ package:
         opt_list ~= negate_list;
         if (opt_list.length) {
             output ~= ["Options:", format_list(opt_list), ""];
+        }
+
+        string[] inherit_opt_list = visibleInheritOptions!Option(cmd).byKeyValue.map!(
+            kv => format_item(kv.key, optionDesc(kv.value))).array;
+        string[] inherit_nopt_list = visibleInheritOptions!NegateOption(cmd).byKeyValue.map!(
+            kv => format_item(kv.key, optionDesc(kv.value))).array;
+        inherit_opt_list ~= inherit_nopt_list;
+        if (inherit_opt_list.length) {
+            output ~= [
+                format("Inherit Options from Command `%s`:",
+                    cmd.parent._name ~ (cmd.parent._aliasNames.empty ? "" : "|" ~ cmd.parent._aliasNames[0])),
+                format_list(inherit_opt_list), ""
+            ];
         }
 
         if (this.showGlobalOptions) {

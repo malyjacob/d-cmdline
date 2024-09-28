@@ -32,8 +32,8 @@ mixin template ConfigCmd() {
         Default_d!"hi!",
         Preset_d!"hello!",
         Negate_d!("-G", "opposite to `--greet`"),
-        Export_d!("-x", "-y", "-z", "--xyz"),
-        N_Export_d!("-X", "-Y", "-Z", "--XYZ")
+        ExportAs_d!("-x", "-y", "-z", "--xyz"),
+        N_ExportAs_d!("-X", "-Y", "-Z", "--XYZ")
     );
 
     mixin END;

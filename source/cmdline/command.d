@@ -273,7 +273,7 @@ public:
     ///              `dir` the directory that external command line program situates on
     ///              `help` the help option of this external command line program, which is useful when invoke the help of this sub command
     /// Returns: `Self` for chain call
-    Self command(string name, string desc, string[string] execOpts = null) {
+    Self commandX(string name, string desc, string[string] execOpts = null) {
         auto cmd = createCommand(name, desc);
         cmd._execHandler = true;
         version (Posix) {
@@ -305,7 +305,8 @@ public:
         }
         if (!this._externalCmdHelpFlagMap || !(cmd._name in this._externalCmdHelpFlagMap))
             this._externalCmdHelpFlagMap[cmd._name] = "--help";
-        cmd.usage(format!"run `%s %s %s` to see"(this._name, cmd._name, this._externalCmdHelpFlagMap[cmd._name]));
+        cmd.usage(format!"run `%s %s %s` to see"(this._name, cmd._name, this
+                ._externalCmdHelpFlagMap[cmd._name]));
         cmd.parent = this;
         cmd._allowExcessArguments = true;
         cmd._showHelpAfterError = false;
@@ -594,6 +595,32 @@ public:
                 });
         }
         return this;
+    }
+
+    /// add one or more options to command
+    Self addOptions(Option[] options...) {
+        foreach (opt; options) {
+            addOption(opt);
+        }
+        return this;
+    }
+
+    /// add one or more negate options to command
+    Self addOptions(NegateOption[] nopts...) {
+        foreach (nopt; nopts) {
+            addOption(nopt);
+        }
+        return this;
+    }
+
+    /// add the negate option to command
+    Self addNOption(NegateOption nopt) {
+        return addOption(nopt);
+    }
+
+    /// add one or more negate options to command
+    Self addNOptions(NegateOption[] nopts...) {
+        return addOptions(nopts);
     }
 
     /// add the action option to command, which will invoke the callback we injected when parsing the flag of this option, only useful in client cmd
@@ -1210,7 +1237,8 @@ package:
                     (str == "--help" || str == "-h"));
         };
         if (!this._defaultCommandName.empty &&
-            (unknowns.length == 0 || (_findCommand(unknowns[0]) is null && unknowns.all!(str => !has_cmd(str) && !has_hvopt(str))))) {
+            (unknowns.length == 0 || (_findCommand(unknowns[0]) is null && unknowns.all!(str => !has_cmd(str) && !has_hvopt(
+                str))))) {
             auto cmd = _findCommand(this._defaultCommandName);
             if (!cmd)
                 parsingError("cannot find the default sub command `"
@@ -1585,12 +1613,12 @@ package:
         if (init_opt(this, arg, _args, vvm)) {
             return true;
         }
-        if (this.parent && this.parent._passThroughOptionValue) {
+        if (this.parent) {
             if (init_imex_command!false(arg, _args, pvvm))
                 return true;
             if (init_imex_command!true(arg, _args, pvvm))
                 return true;
-            if (init_opt(this.parent, arg, _args, pvvm))
+            if (this.parent._passThroughOptionValue && init_opt(this.parent, arg, _args, pvvm))
                 return true;
         }
         return false;
@@ -1636,12 +1664,12 @@ package:
         }
         if (init_comb(this, flag, arg, _args, vvm))
             return true;
-        if (this.parent && this.parent._passThroughOptionValue) {
+        if (this.parent) {
             if (init_imex_comb!false(flag, arg, _args, pvvm))
                 return true;
             if (init_imex_comb!true(flag, arg, _args, pvvm))
                 return true;
-            if (init_comb(this.parent, flag, arg, _args, pvvm))
+            if (this.parent._passThroughOptionValue && init_comb(this.parent, flag, arg, _args, pvvm))
                 return true;
         }
         return false;
@@ -1662,7 +1690,6 @@ package:
                 continue;
             if (init_comb(this.parent, opt.longFlag, arg, _args, pvvm))
                 return true;
-
         }
         foreach (key, nopt; _n_map) {
             if (flag != key)
@@ -1689,7 +1716,7 @@ package:
         }
         if (init_assign(this, flag, value, vvm))
             return true;
-        if (this.parent && this.parent._passThroughOptionValue) {
+        if (this.parent) {
             foreach (key, opt; _import_map) {
                 if (flag != key)
                     continue;
@@ -1702,7 +1729,7 @@ package:
                 if (init_assign(this.parent, opt.longFlag, value, pvvm))
                     return true;
             }
-            if (init_assign(this.parent, flag, value, pvvm))
+            if (this.parent._passThroughOptionValue && init_assign(this.parent, flag, value, pvvm))
                 return true;
         }
         return false;
@@ -1759,7 +1786,7 @@ package:
 
         init_variadic(this, variadic_val_map);
         init_variadic(this.parent, pvariadic_val_map);
-        if (this.parent && this.parent._passThroughOptionValue) {
+        if (this.parent) {
             this.parent
                 ._options
                 .filter!(opt => opt.isValid && !opt.settled)
@@ -2187,7 +2214,7 @@ public:
             format("define the directories of the config file," ~
                     "if not specified, the config file name would be" ~
                     " `%s.config.json` and it is on the dir `%s` and current woker dir `%s`",
-                    this._name, defaultDir, cwd) : desc;
+                this._name, defaultDir, cwd) : desc;
         this._configPaths ~= defaultDir;
         this._configPaths ~= cwd;
         this._configPaths = this._configPaths.uniq.array;
@@ -2665,14 +2692,14 @@ public:
                 else {
                     this.opts = this.opts is null ?
                         this._options
-                        .filter!(opt => opt.settled)
-                        .map!(opt => tuple(opt.name, opt.get))
-                        .assocArray : this.opts;
+                            .filter!(opt => opt.settled)
+                            .map!(opt => tuple(opt.name, opt.get))
+                            .assocArray : this.opts;
                     this.args = this.args.empty ?
                         this._arguments
-                        .filter!(arg => arg.settled)
-                        .map!(arg => arg.get)
-                        .array : this.args;
+                            .filter!(arg => arg.settled)
+                            .map!(arg => arg.get)
+                            .array : this.args;
                     OptsWrap wopts = OptsWrap(this.opts);
                     static if (len == 1) {
                         fn(wopts);
@@ -2920,7 +2947,7 @@ public:
         return this;
     }
 
-    /// whether allow pass through options' flags(config, help, version options are not included)
+    /// whether allow pass through all options' flags(config, help, version options are not included)
     /// behind its sub commands, default: `false`
     Self passThrough(bool allow = true) {
         this._passThroughOptionValue = allow;
@@ -2928,24 +2955,20 @@ public:
     }
 
     /// import the option flag as new flag from parent command, so that this new flag can be pased as the
-    /// the option flag of parent command. this member function aims at avoidind flag conflict between
-    /// the command and its parent command, after using `passThrough` on parent command.
-    /// the parent command must exist and parent command must have used `passThrough` and the `flag` must
-    /// be the flag of one of the parent command's option or negate option.
+    /// the option flag of parent command.
+    /// the parent command must exist.
     /// remeber that when parsing the new flag, the option's new flag is prior to the negate option ones.
     /// when parsing command line option flags, imported flag is prior to exported one, and the export one is 
     /// prior to the ordinary pass-through option flag.
-    /// `isNegate` decide whether import negate option or non-negate one, default: `false`
+    /// `isNegate` decide whether import_ negate option or non-negate one, default: `false`
     /// Params:
     ///   flag = the flag(or name) of one of the parent command's option or negate option
-    ///   aliasFlags = the new flags
+    ///   aliasFlags = the new flags, if it is null, then will import_ the shot-flag and long-flag of option if exits
     /// Returns: `Self` for chain call
     Self importAs(bool isNegate = false)(string flag, string[] aliasFlags...) {
-        if (!this.parent || !this.parent._passThroughOptionValue)
+        if (!this.parent)
             this.error(format("cannot use member function `Command.importAs` in command `%s` for 
-                the parent command is not found or its parent 
-                command has not used member function `Command.passThrough`", this._name));
-        assert(aliasFlags.length);
+                the parent command is not found", this._name));
         static if (isNegate) {
             auto flg = imExAsImpl!(NegateOption)(flag, aliasFlags);
             enum string word = "negate ";
@@ -2956,7 +2979,7 @@ public:
         }
         if (!flg)
             this.error(format("cannot find the %soption `%s` in `Command.importAs` in command `%s`",
-                    word, flag, this._name));
+                word, flag, this._name));
         return this;
     }
 
@@ -2964,9 +2987,7 @@ public:
     alias importNAs = importAs!true;
 
     /// export the option flag as new flag to sub command, so that this new flag can be pased as the
-    /// the option flag of parent command. this member function aims at avoidind flag conflict between
-    /// the command and its sub command, after using `passThrough` on this command.
-    /// this function would be automatically call `Command.passThrough`.
+    /// the option flag of parent command.
     /// the `flag` must be the flag of one of the command's option or negate option.
     /// remeber that when parsing the new flag, the option's new flag is prior to the negate option ones.
     /// when parsing command line option flags, imported flag is prior to exported one, and the export one is 
@@ -2974,12 +2995,9 @@ public:
     /// `isNegate` decide whether export negate option or non-negate one, default: `false`
     /// Params:
     ///   flag = the flag(or name) of one of the command's option or negate option
-    ///   aliasFlags = the new flags
+    ///   aliasFlags = the new flags, if it is null, then will export the shot-flag and long-flag of option if exits
     /// Returns: `Self` for chain call
     Self exportAs(bool isNegate = false)(string flag, string[] aliasFlags...) {
-        assert(aliasFlags.length);
-        if (!this._passThroughOptionValue)
-            this.passThrough();
         static if (isNegate) {
             auto flg = imExAsImpl!(NegateOption, true)(flag, aliasFlags);
             enum string word = "negate ";
@@ -3014,13 +3032,22 @@ public:
                 alias _map = this._import_n_map;
         }
         if (T opt = find_opt!(this)(flag)) {
+            if (!aliasFlags.length) {
+                if (opt.shortFlag.length)
+                    aliasFlags ~= opt.shortFlag;
+                if (opt.longFlag.length)
+                    aliasFlags ~= opt.longFlag; 
+            }
             auto tmp = aliasFlags.uniq;
             if (_map is null) {
                 _map = tmp.map!(f => tuple(f, opt)).assocArray;
                 return true;
             }
-            tmp.filter!(f => _map.byKey.count(f) == 0)
-                .each!((f) { _map[f] = opt; });
+            tmp.each!((f) {
+                if (_map.byKey.canFind(f))
+                this.error(format("the new flag `%s` for option `%s` has been used for option `%s`", f, opt.flags, _map[f].flags));
+            });
+            tmp.each!((f) { _map[f] = opt; });
             return true;
         }
         return false;
@@ -3077,11 +3104,11 @@ public:
             return "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-                        ]) ~
+            ]) ~
                     (_commands.length ? "[command]" : [
-                        ]) ~
+            ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-                        ])
+            ])
             ).join(" ");
         }
         return this._usage;
@@ -3109,11 +3136,11 @@ public:
             command._usage = "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-                        ]) ~
+            ]) ~
                     (_commands.length ? "[command]" : [
-                        ]) ~
+            ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-                        ])
+            ])
             ).join(" ");
         }
         else
@@ -3137,14 +3164,14 @@ unittest {
     cmd.description("this is test");
     assert("description: this is test" == cmd.description);
     cmd.description("this is test", [
-            "first": "1st",
-            "second": "2nd"
-        ]);
+        "first": "1st",
+        "second": "2nd"
+    ]);
     assert(
         cmd._argsDescription == [
-            "first": "1st",
-            "second": "2nd"
-        ]);
+        "first": "1st",
+        "second": "2nd"
+    ]);
     cmd.setVersion("0.0.1");
     // cmd.emit("command:version");
     // cmd.emit("option:version");

@@ -417,6 +417,10 @@
         white-space: pre-wrap;
       }
 
+      .ddoc .code_lines pre {
+        display: contents;
+      }
+
       .ddoc .code_lines li:only-of-type::before {
         color: rgba(255, 255, 255, 1);
         content: " ";
@@ -1176,7 +1180,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
 </li><li class="ddoc_member">
   <div class="ddoc_member_header">
   <div class="ddoc_header_anchor">
-  <a href="#Command.command" id="Command.command"><code class="code">command</code></a>
+  <a href="#Command.commandX" id="Command.commandX"><code class="code">commandX</code></a>
 </div>
 </div><div class="ddoc_decl">
   <section class="section">
@@ -1185,7 +1189,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
       <div class="dlang">
         <p class="para">
           <code class="code">
-            <span class="ddoc_anchor" id="Command.command.2"></span>Self <code class="code">command</code>(string <code class="code">name</code>, string <code class="code">desc</code>, string[string] <code class="code">execOpts</code> = null);
+            <span class="ddoc_anchor" id="Command.commandX"></span>Self <code class="code">commandX</code>(string <code class="code">name</code>, string <code class="code">desc</code>, string[string] <code class="code">execOpts</code> = null);
 
           </code>
         </p>
@@ -1197,7 +1201,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    define a sub <code class="code">command</code>, which represents the external <code class="code">command</code> line program
+    define a sub command, which represents the external command line program
 
   </p>
 </div>
@@ -1214,7 +1218,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      only the <code class="code">name</code> of this sub <code class="code">command</code>
+      only the <code class="code">name</code> of this sub command
     </p>
   </div>
 </td>
@@ -1228,7 +1232,7 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      the description of this sub <code class="code">command</code>
+      the description of this sub command
     </p>
   </div>
 </td>
@@ -1243,9 +1247,9 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
   <div class="ddoc_param_desc">
     <p class="para">
       controll the behavior,
-<code class="code">file</code> the file <code class="code">name</code> of external <code class="code">command</code> line program,
-<code class="code">dir</code> the directory that external <code class="code">command</code> line program situates on
-<code class="code">help</code> the help option of this external <code class="code">command</code> line program, which is useful when invoke the help of this sub <code class="code">command</code>
+<code class="code">file</code> the file <code class="code">name</code> of external command line program,
+<code class="code">dir</code> the directory that external command line program situates on
+<code class="code">help</code> the help option of this external command line program, which is useful when invoke the help of this sub command
     </p>
   </div>
 </td>
@@ -1534,6 +1538,134 @@ this sub <code class="code">command</code> inherit the basic configuration of pa
   <div class="ddoc_summary">
   <p class="para">
     add the negate <code class="code">option</code> to command
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.addOptions" id="Command.addOptions"><code class="code">addOptions</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.addOptions"></span>Self <code class="code">addOptions</code>(Option[] <code class="code">options</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    add one or more <code class="code">options</code> to command
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.addOptions" id="Command.addOptions"><code class="code">addOptions</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.addOptions.2"></span>Self <code class="code">addOptions</code>(NegateOption[] <code class="code">nopts</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    add one or more negate options to command
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.addNOption" id="Command.addNOption"><code class="code">addNOption</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.addNOption"></span>Self <code class="code">addNOption</code>(NegateOption <code class="code">nopt</code>);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    add the negate option to command
+  </p>
+</div>
+
+</section>
+
+</div>
+
+</li><li class="ddoc_member">
+  <div class="ddoc_member_header">
+  <div class="ddoc_header_anchor">
+  <a href="#Command.addNOptions" id="Command.addNOptions"><code class="code">addNOptions</code></a>
+</div>
+</div><div class="ddoc_decl">
+  <section class="section">
+    <div class="declaration">
+      <h4>Declaration</h4>
+      <div class="dlang">
+        <p class="para">
+          <code class="code">
+            <span class="ddoc_anchor" id="Command.addNOptions"></span>Self <code class="code">addNOptions</code>(NegateOption[] <code class="code">nopts</code>...);
+
+          </code>
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+<div class="ddoc_decl">
+  <section class="section ddoc_sections">
+  <div class="ddoc_summary">
+  <p class="para">
+    add one or more negate options to command
   </p>
 </div>
 
@@ -4187,7 +4319,7 @@ if <code class="code"><code class="code">defaultDir</code></code> not defined, t
   <section class="section ddoc_sections">
   <div class="ddoc_summary">
   <p class="para">
-    whether <code class="code">allow</code> pass through options' flags(config, help, version options are not included)
+    whether <code class="code">allow</code> pass through all options' flags(config, help, version options are not included)
 behind its sub commands, default: <code class="code">false</code>
   </p>
 </div>
@@ -4221,14 +4353,12 @@ behind its sub commands, default: <code class="code">false</code>
   <div class="ddoc_summary">
   <p class="para">
     import the option <code class="code">flag</code> as new <code class="code">flag</code> from parent command, so that this new <code class="code">flag</code> can be pased as the
-the option <code class="code">flag</code> of parent command. this member function aims at avoidind <code class="code">flag</code> conflict between
-the command and its parent command, after using <code class="code">passThrough</code> on parent command.
-the parent command must exist and parent command must have used <code class="code">passThrough</code> and the <code class="code"><code class="code">flag</code></code> must
-be the <code class="code">flag</code> of one of the parent command's option or negate option.
+the option <code class="code">flag</code> of parent command.
+the parent command must exist.
 remeber that when parsing the new <code class="code">flag</code>, the option's new <code class="code">flag</code> is prior to the negate option ones.
 when parsing command line option flags, imported <code class="code">flag</code> is prior to exported one, and the export one is
 prior to the ordinary pass-through option <code class="code">flag</code>.
-<code class="code">isNegate</code> decide whether import negate option or non-negate one, default: <code class="code">false</code>
+<code class="code">isNegate</code> decide whether import_ negate option or non-negate one, default: <code class="code">false</code>
 
   </p>
 </div>
@@ -4259,7 +4389,7 @@ prior to the ordinary pass-through option <code class="code">flag</code>.
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      the new flags
+      the new flags, if it is <code class="code">null</code>, then will import_ the shot-<code class="code">flag</code> and long-<code class="code">flag</code> of option if exits
     </p>
   </div>
 </td>
@@ -4336,9 +4466,7 @@ prior to the ordinary pass-through option <code class="code">flag</code>.
   <div class="ddoc_summary">
   <p class="para">
     export the option <code class="code">flag</code> as new <code class="code">flag</code> to sub command, so that this new <code class="code">flag</code> can be pased as the
-the option <code class="code">flag</code> of parent command. this member function aims at avoidind <code class="code">flag</code> conflict between
-the command and its sub command, after using <code class="code">passThrough</code> on this command.
-this function would be automatically call <code class="code">Command.passThrough</code>.
+the option <code class="code">flag</code> of parent command.
 the <code class="code"><code class="code">flag</code></code> must be the <code class="code">flag</code> of one of the command's option or negate option.
 remeber that when parsing the new <code class="code">flag</code>, the option's new <code class="code">flag</code> is prior to the negate option ones.
 when parsing command line option flags, imported <code class="code">flag</code> is prior to exported one, and the export one is
@@ -4374,7 +4502,7 @@ prior to the ordinary pass-through option <code class="code">flag</code>.
 <td>
   <div class="ddoc_param_desc">
     <p class="para">
-      the new flags
+      the new flags, if it is <code class="code">null</code>, then will export the shot-<code class="code">flag</code> and long-<code class="code">flag</code> of option if exits
     </p>
   </div>
 </td>
