@@ -552,19 +552,49 @@ public:
                 this.on("option:" ~ name, (string[] vals) {
                     if (vals.length)
                         setOptionVal!(Source.Cli)(name, vals);
-                    else
+                    else {
+                        option.settled = false;
                         option.found = true;
+                        auto type = option.innerType;
+                        static foreach (symbol; __traits(allMembers, InnerType)[1 .. $]) {
+                            if (mixin("type == InnerType." ~ symbol)) {
+                                auto var_option = cast(VariadicOption!(mixin(symbol.toLower))) option;
+                                var_option.cliArg = null;
+                            }
+                        }
+                        if (this._abandons.canFind(option)) {
+                            this._abandons = this._abandons.remove!(ele => ele is option);
+                            this._options ~= option;
+                        }
+                    }
                 });
             }
             else {
                 this.on("option:" ~ name, (string val) {
                     setOptionVal!(Source.Cli)(name, val);
                 });
-                this.on("option:" ~ name, () { option.found = true; });
+                this.on("option:" ~ name, () {
+                    option.settled = false;
+                    option.found = true;
+                    auto type = option.innerType;
+                    static foreach (symbol; __traits(allMembers, InnerType)[1 .. $]) {
+                        if (mixin("type == InnerType." ~ symbol)) {
+                            auto val_option = cast(ValueOption!(mixin(symbol.toLower))) option;
+                            val_option.cliArg = null;
+                        }
+                    }
+                    if (this._abandons.canFind(option)) {
+                        this._abandons = this._abandons.remove!(ele => ele is option);
+                        this._options ~= option;
+                    }
+                });
             }
         }
         else {
-            this.on("option:" ~ name, () { option.found = true; });
+            this.on("option:" ~ name, () {
+                option.settled = false;
+                option.found = true;
+            });
         }
         return this;
     }
@@ -591,7 +621,8 @@ public:
             else
                 this.on("negate:" ~ option.name, () {
                     this._options = this._options.remove!(ele => ele is opt);
-                    this._abandons ~= opt;
+                    if (!this._abandons.canFind(opt))
+                        this._abandons ~= opt;
                 });
         }
         return this;
@@ -624,26 +655,54 @@ public:
     }
 
     /// add the action option to command, which will invoke the callback we injected when parsing the flag of this option, only useful in client cmd
-    Self addActionOption(Option option, void delegate(string[] vals...) call_back, bool endMode = true) {
-        if (!this._allowVariadicMerge)
-            option.merge(false);
-        this._registerOption(option);
+    Self addActionOption(T)(Option option, void delegate(T[] vals...) callback, bool endMode = true)
+            if (isBaseOptionValueType!T) {
+        this.addOption(option);
+        bool is_variadic = option.variadic;
+        bool is_bool = option.isBoolean;
         string name = option.name;
-        this.on("option:" ~ name, () {
-            call_back();
-            if (endMode)
-                this._exitSuccessfully();
-        });
-        this.on("option:" ~ name, (string str) {
-            call_back(str);
-            if (endMode)
-                this._exitSuccessfully();
-        });
-        this.on("option:" ~ name, (string[] strs) {
-            call_back(strs);
-            if (endMode)
-                this._exitSuccessfully();
-        });
+        if (is_bool) {
+            auto inner_fn = this.eventMap["option:" ~ name].get!EventCallback_1;
+            this.eventMap["option:" ~ name] = () {
+                inner_fn();
+                option.initialize;
+                callback();
+                if (endMode)
+                    this._exitSuccessfully;
+            };
+        }
+        else if (is_variadic) {
+            auto inner_fn = this.eventMap["option:" ~ name].get!EventCallback_4;
+            this.eventMap["option:" ~ name] = (string[] vals) {
+                inner_fn(vals);
+                option.initialize;
+                if (option.isValueData) {
+                    callback(option.get!(T[]));
+                }
+                else
+                    callback();
+                if (endMode)
+                    this._exitSuccessfully;
+            };
+        }
+        else {
+            auto inner_fn_1 = this.eventMap["option:" ~ name].get!EventCallback_2;
+            auto inner_fn_2 = this.eventMap["option:" ~ name].get!EventCallback_1;
+            this.eventMap["option:" ~ name] = (string val) {
+                inner_fn_1(val);
+                option.initialize;
+                callback(option.get!T);
+                if (endMode)
+                    this._exitSuccessfully;
+            };
+            this.eventMap["option:" ~ name] = () {
+                inner_fn_2();
+                option.initialize;
+                callback();
+                if (endMode)
+                    this._exitSuccessfully;
+            };
+        }
         return this;
     }
 
@@ -985,12 +1044,17 @@ package:
 
     Self setOptionVal(Source src : Source.Cli, T:
         string)(string key, T value, T[] rest...) {
-        auto opt = this._findOption(key);
+        auto opt = this._findOptionFromAll(key);
         if (!opt) {
             this.parsingError(format!"option `%s` doesn't exist"(key));
         }
         opt.cliVal(value, rest);
+        opt.settled = false;
         opt.found = true;
+        if (this._abandons.canFind(opt)) {
+            this._abandons = this._abandons.remove!(ele => ele is opt);
+            this._options ~= opt;
+        }
         return this;
     }
 
@@ -1232,7 +1296,7 @@ package:
             auto vopt = this._versionOption;
             auto hopt = this._helpOption;
             auto _opt = vopt && vopt.isFlag(str) ? vopt : null;
-            _opt = !_opt && hopt && hopt.isFlag(str) ? hopt : null;
+            _opt = !_opt && hopt && hopt.isFlag(str) ? hopt : _opt;
             return _opt ? true : (this._addImplicitHelpOption &&
                     (str == "--help" || str == "-h"));
         };
@@ -1243,6 +1307,9 @@ package:
             if (!cmd)
                 parsingError("cannot find the default sub command `"
                         ~ this._defaultCommandName ~ "`");
+            if (this.parent && !("#e799b0" in this.parent.opts)) {
+                _parseCommandSectionImpl(this.parent);
+            }
             if (this._configOption && !cmd._execHandler) {
                 auto j_config = _processConfigFile();
                 if (j_config.length) {
@@ -1265,33 +1332,54 @@ package:
         }
         this.parseOptionsEnv();
         auto parsed = this.parseOptions(unknowns);
-        this.argFlags = parsed[0];
-        this.unknownFlags = parsed[1];
         this.parseOptionsConfig();
-        this.parseOptionsImply();
         this._options
             .filter!(opt => opt.settled || opt.isValid)
             .each!((opt) { opt.initialize; });
+        this.argFlags = parsed[0];
+        this.unknownFlags = parsed[1];
         this.parseArguments(parsed[0]);
-        if (this._argToOptNames.length > 0) {
-            this._options
-                .filter!(opt => opt.settled || opt.isValid)
-                .each!((opt) { opt.initialize; });
+
+        if (!this.subCommand || this.subCommand._execHandler ||
+            (!this._passThroughOptionValue && !this._export_map && !this._export_n_map &&
+                !this.subCommand._import_map && !this.subCommand._import_n_map)) {
+            _parseCommandSectionImpl(this);
         }
-        _checkConfilctOption();
-        _checkMissingMandatoryOption();
-        this.opts = this._options
+
+        if (this.subCommand && this.subCommand._execHandler) {
+            this._called_sub = this.subCommand._name;
+            this.subCommand.execSubCommand(parsed[1]);
+        }
+        if (this.subCommand) {
+            this._called_sub = this.subCommand._name;
+            this.subCommand._parseCommand(parsed[1]);
+        }
+        else {
+            this.emit("action:" ~ this._name);
+        }
+    }
+
+    private
+    static void _parseCommandSectionImpl(Command command) {
+        command.parseOptionsImply();
+        command._options
+            .filter!(opt => opt.settled || opt.isValid)
+            .each!((opt) { opt.initialize; });
+        command._checkConfilctOption();
+        command._checkMissingMandatoryOption();
+        command.opts = command._options
             .filter!(opt => opt.settled)
             .map!(opt => tuple(opt.name, opt.get))
             .assocArray;
-        if (this.parent && this.parent._allowExposeOptionValue) {
-            auto popts = this.parent.opts;
+        command.opts["#e799b0"] = OptionVariant("diana-color");
+        if (command.parent && command.parent._allowExposeOptionValue) {
+            auto popts = command.parent.opts;
             foreach (string pkey, ref OptionVariant pvalue; popts) {
-                this.opts[':' ~ pkey] = pvalue;
+                command.opts[':' ~ pkey] = pvalue;
             }
         }
-        if (!this._inject_arr.empty) {
-            foreach (string str; _inject_arr) {
+        if (!command._inject_arr.empty) {
+            foreach (string str; command._inject_arr) {
                 string key, fkey;
                 if (str.canFind(':')) {
                     auto tmp = str.split(':').array;
@@ -1300,7 +1388,7 @@ package:
                 }
                 else
                     key = fkey = str;
-                auto ancestors = this._getCommandAndAncestors()[1 .. $];
+                auto ancestors = command._getCommandAndAncestors()[1 .. $];
                 foreach (Command cmd; ancestors) {
                     auto provide_arr = cmd._provide_arr;
                     provide_arr.each!((const str) {
@@ -1313,21 +1401,10 @@ package:
                         else
                             pkey = pfkey = str;
                         if (fkey == pkey)
-                            this.opts[key] = cmd.opts[pfkey];
+                            command.opts[key] = cmd.opts[pfkey];
                     });
                 }
             }
-        }
-        if (this.subCommand && this.subCommand._execHandler) {
-            this._called_sub = this.subCommand._name;
-            this.subCommand.execSubCommand(parsed[1]);
-        }
-        if (this.subCommand) {
-            this._called_sub = this.subCommand._name;
-            this.subCommand._parseCommand(parsed[1]);
-        }
-        else {
-            this.emit("action:" ~ this._name);
         }
     }
 
@@ -1392,9 +1469,6 @@ package:
                 if (value.empty || maybe_opt(value))
                     cmd.optionMissingArgument(opt);
                 cmd.emit("option:" ~ name, value);
-                if (cmd !is this) {
-                    opt.settled = false;
-                }
                 _args.popFront;
                 return 1;
             }();
@@ -1407,9 +1481,6 @@ package:
                 else {
                     cmd.emit("option:" ~ name, value);
                     _args.popFront;
-                }
-                if (cmd !is this) {
-                    opt.settled = false;
                 }
                 return 1;
             }();
@@ -1446,9 +1517,6 @@ package:
                         opt.flags
                 ));
             }
-            if (cmd !is this) {
-                opt.settled = false;
-            }
             return 1;
         }();
     }
@@ -1473,9 +1541,6 @@ package:
             }
             else
                 cmd.parsingError("invalid value: `" ~ value ~ "` for bool option " ~ opt.flags);
-            if (cmd !is this) {
-                opt.settled = false;
-            }
             return 1;
         }();
     }
@@ -1492,7 +1557,7 @@ package:
 
     private bool init_opt(Command cmd, string arg, ref string[] _args, ref string[][string] vvm) {
         bool is_continue = false;
-        if (auto opt = cmd._findOption(arg)) {
+        if (auto opt = cmd._findOptionFromAll(arg)) {
             auto name = opt.name;
             bool is_variadic = opt.variadic;
             if (opt.isRequired) {
@@ -1525,7 +1590,7 @@ package:
 
     private bool init_comb(Command cmd, string flag, string arg, ref string[] _args, ref string[][string] vvm) {
         bool is_continue = false;
-        if (Option opt = cmd._findOption(flag)) {
+        if (Option opt = cmd._findOptionFromAll(flag)) {
             mixin InitOptComb!(cmd, _args, opt, vvm, arg);
             is_continue = true;
         }
@@ -1547,7 +1612,7 @@ package:
 
     private bool init_assign(Command cmd, string flag, string value, ref string[][string] vvm) {
         bool is_continue = false;
-        if (Option opt = cmd._findOption(flag)) {
+        if (Option opt = cmd._findOptionFromAll(flag)) {
             mixin InitOptAssign!(cmd, opt, vvm, value);
             is_continue = true;
         }
@@ -1563,10 +1628,6 @@ package:
             }
             else {
                 cmd.emit("option:" ~ key, value);
-                if (cmd !is this) {
-                    auto opt = cmd._findOption(key);
-                    opt.settled = false;
-                }
             }
         }
         vvm = null;
@@ -1786,16 +1847,8 @@ package:
 
         init_variadic(this, variadic_val_map);
         init_variadic(this.parent, pvariadic_val_map);
-        if (this.parent) {
-            this.parent
-                ._options
-                .filter!(opt => opt.isValid && !opt.settled)
-                .each!((opt) { opt.initialize; });
-            this.parent.opts = this.parent
-                ._options
-                .filter!(opt => opt.settled)
-                .map!(opt => tuple(opt.name, opt.get))
-                .assocArray;
+        if (this.parent && !("#e799b0" in this.parent.opts)) {
+            _parseCommandSectionImpl(this.parent);
         }
         return tuple(operands, unknowns);
     }
@@ -1811,7 +1864,7 @@ package:
                 flag) || opt.name == flag);
         if (!any_abandon.empty) {
             msg = format("this option `%s` has been disable by its related negate option `--%s`",
-                any_abandon[0].flags, any_abandon[0].name);
+                any_abandon[0].flags, _findNegateOption(any_abandon[0].name).flags);
             this.parsingError(msg, "command.disableOption");
         }
         else {
@@ -1854,17 +1907,15 @@ package:
 
     void _checkConfilctOption() const {
         auto opts = this._options
-            .filter!(opt => opt.settled)
-            .filter!(opt => !(opt.source == Source.Default || opt.source == Source.None || opt.source == Source
-                    .Imply))
+            .filter!(opt => opt.settled && (!opt.isBoolean || opt.get!bool))
             .array;
         auto is_conflict = (const Option opt) {
             const string[] confilcts = opt.conflictsWith;
             foreach (name; confilcts) {
                 opts.each!((o) {
                     if (opt !is o && o.name == name)
-                        this.parsingError(
-                            format!"cannot set option `%s` and `%s` at the same time"(o.name, name));
+                        parsingError(format!"the values of the option `%s` and `%s` cannot both be valid"(name, opt
+                            .name));
                 });
             }
         };
@@ -1898,31 +1949,31 @@ package:
                 if (!opt)
                     unknownOption(this._argToOptNames[index]);
                 if (opt.variadic) {
-                    this.setOptionVal!(Source.Cli)(opt.name, args);
-                    opt.settled = false;
+                    if (!opt.isValid || !opt.settled ||
+                        (opt.source != Source.Cli && opt.source != Source.Preset) || opt.isMerge)
+                        this.setOptionVal!(Source.Cli)(opt.name, args);
                     args = [];
                     break;
                 }
-                if (!opt.isValid || !opt.settled || opt.source != Source.Cli) {
-                    if (opt.isBoolean) {
-                        try {
-                            bool value = args[index].to!bool;
-                            this.setOptionValDirectly(opt.name, value, Source.Cli);
-                            args.popFront;
+                else {
+                    if (!opt.isValid || !opt.settled || (opt.source != Source.Cli && opt.source != Source
+                            .Preset)) {
+                        if (opt.isBoolean) {
+                            try {
+                                bool value = args[index].to!bool;
+                                this.setOptionValDirectly(opt.name, value, Source.Cli);
+                            }
+                            catch (ConvException e) {
+                                parsingError(format!"on bool option `%s` cannot convert the input `%s` to type `%s`"(
+                                        opt.flags, args[index], bool.stringof
+                                ));
+                            }
                         }
-                        catch (ConvException e) {
-                            parsingError(format!"on bool option `%s` cannot convert the input `%s` to type `%s`"(
-                                    opt.flags,
-                                    args[index],
-                                    bool.stringof
-                            ));
+                        else {
+                            this.setOptionVal!(Source.Cli)(opt.name, get_front());
                         }
                     }
-                    else {
-                        this.setOptionVal!(Source.Cli)(opt.name, get_front());
-                        opt.settled = false;
-                        args.popFront;
-                    }
+                    args.popFront;
                 }
             }
         }
@@ -1958,6 +2009,8 @@ package:
 
     void parseOptionsImply() {
         auto set_imply = (Option option) {
+            if (option.isBoolean && !option.get!bool)
+                return;
             auto imply_map = option.implyMap;
             foreach (string key, OptionVariant value; imply_map) {
                 auto tmp = split(key, ':');
@@ -1978,10 +2031,7 @@ package:
                 }
                 auto any_abandon = this._abandons.find!(
                     (const Option opt) => opt.name == name);
-                if (!opt && !any_abandon.empty) {
-                    this.unknownOption(name);
-                }
-                if (!opt) {
+                if (!opt && any_abandon.empty) {
                     string flag = format("--%s <%s-value>", name, name);
                     string flag2 = format("--%s", name);
                     string flag3 = format("--%s <%s-value...>", name, name);
@@ -2022,9 +2072,8 @@ package:
             .each!((opt) { opt.initialize; });
         this._options
             .filter!(opt => opt.settled)
-            .filter!(opt => !(opt.source == Source.Default || opt.source == Source.None || opt
-                    .source == Source
-                    .Imply))
+            .filter!(opt => !(opt.source == Source.Default ||
+                    opt.source == Source.None || opt.source == Source.Imply))
             .each!(set_imply);
     }
 
@@ -2214,7 +2263,7 @@ public:
             format("define the directories of the config file," ~
                     "if not specified, the config file name would be" ~
                     " `%s.config.json` and it is on the dir `%s` and current woker dir `%s`",
-                this._name, defaultDir, cwd) : desc;
+                    this._name, defaultDir, cwd) : desc;
         this._configPaths ~= defaultDir;
         this._configPaths ~= cwd;
         this._configPaths = this._configPaths.uniq.array;
@@ -2350,8 +2399,7 @@ public:
             }
         }
         foreach (string key, Value value; copts) {
-            Option opt = _findOption(key);
-            if (opt) {
+            if (auto opt = _findOptionFromAll(key)) {
                 mixin AssignOptOrArg!(opt, value);
             }
             else {
@@ -2692,14 +2740,14 @@ public:
                 else {
                     this.opts = this.opts is null ?
                         this._options
-                            .filter!(opt => opt.settled)
-                            .map!(opt => tuple(opt.name, opt.get))
-                            .assocArray : this.opts;
+                        .filter!(opt => opt.settled)
+                        .map!(opt => tuple(opt.name, opt.get))
+                        .assocArray : this.opts;
                     this.args = this.args.empty ?
                         this._arguments
-                            .filter!(arg => arg.settled)
-                            .map!(arg => arg.get)
-                            .array : this.args;
+                        .filter!(arg => arg.settled)
+                        .map!(arg => arg.get)
+                        .array : this.args;
                     OptsWrap wopts = OptsWrap(this.opts);
                     static if (len == 1) {
                         fn(wopts);
@@ -2825,6 +2873,19 @@ public:
         return tmp.empty ? null : tmp[0];
     }
 
+    Command _findCommandFromAll(string name) {
+        auto _cmd = _findCommand(name);
+        auto vcmd = this._versionCommand;
+        auto hcmd = this._helpCommand;
+        _cmd = !_cmd && vcmd && vcmd._name == name ? vcmd : _cmd;
+        _cmd = !_cmd && hcmd && hcmd._name == name ? hcmd : _cmd;
+        if (!_cmd && this._addImplicitHelpCommand && name == "help") {
+            this.setHelpCommand();
+            _cmd = this._helpCommand;
+        }
+        return _cmd;
+    }
+
     inout(Option) _findOption(string flag) inout {
         auto tmp = this._options.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
@@ -2833,6 +2894,32 @@ public:
     inout(NegateOption) _findNegateOption(string flag) inout {
         auto tmp = this._negates.find!(opt => opt.isFlag(flag) || flag == opt.name);
         return tmp.empty ? null : tmp[0];
+    }
+
+    Option _findOptionFromAll(string flag, bool exceptHVC = true) {
+        auto or_opt = _findOption(flag);
+        auto ab_tmp = _abandons.find!(opt => opt.isFlag(flag) || flag == opt.name);
+        auto ab_opt = ab_tmp.empty ? null : ab_tmp[0];
+        Option result_opt;
+        result_opt = or_opt ? or_opt : ab_opt;
+        if (result_opt)
+            return result_opt;
+        else if (!exceptHVC) {
+            auto vopt = this._versionOption;
+            auto hopt = this._helpOption;
+            auto copt = this._configOption;
+            auto _opt = vopt && (vopt.isFlag(flag) || flag == vopt.name) ? vopt : null;
+            _opt = !_opt && hopt && (hopt.isFlag(flag) || flag == hopt.name) ? hopt : _opt;
+            _opt = !_opt && copt && (copt.isFlag(flag) || flag == copt.name) ? copt : _opt;
+            if (!_opt && (flag == "--help" || flag == "-h" || flag == "help") && this
+                ._addImplicitHelpOption) {
+                this.setHelpOption();
+                _opt = this._helpOption;
+            }
+            return _opt;
+        }
+        else
+            return null;
     }
 
     /// add argument for command
@@ -2979,7 +3066,7 @@ public:
         }
         if (!flg)
             this.error(format("cannot find the %soption `%s` in `Command.importAs` in command `%s`",
-                word, flag, this._name));
+                    word, flag, this.parent._name));
         return this;
     }
 
@@ -3018,34 +3105,58 @@ public:
     private bool imExAsImpl(T, bool isExport = false)(string flag, string[] aliasFlags...)
             if (is(T == Option) || is(T == NegateOption)) {
         static if (is(T == Option)) {
-            alias find_opt(alias cmd) = cmd._findOption;
-            static if (isExport)
+            static if (isExport) {
                 alias _map = this._export_map;
-            else
+                alias _map_other = this._export_n_map;
+                T opt = this._findOption(flag);
+            }
+            else {
                 alias _map = this._import_map;
+                alias _map_other = this._import_n_map;
+                T opt = this.parent._findOption(flag);
+            }
         }
         else {
-            alias find_opt(alias cmd) = cmd._findNegateOption;
-            static if (isExport)
+            static if (isExport) {
                 alias _map = this._export_n_map;
-            else
+                alias _map_other = this._export_map;
+                T opt = this._findNegateOption(flag);
+            }
+            else {
                 alias _map = this._import_n_map;
+                alias _map_other = this._import_map;
+                T opt = this.parent._findNegateOption(flag);
+            }
         }
-        if (T opt = find_opt!(this)(flag)) {
+        if (opt) {
             if (!aliasFlags.length) {
                 if (opt.shortFlag.length)
                     aliasFlags ~= opt.shortFlag;
                 if (opt.longFlag.length)
-                    aliasFlags ~= opt.longFlag; 
+                    aliasFlags ~= opt.longFlag;
             }
             auto tmp = aliasFlags.uniq;
+            enum txt = is(T == NegateOption) ? "negate " : "";
+            enum rtxt = is(T == NegateOption) ? "" : "negate ";
+            enum etxt = isExport ? "exporting" : "importing";
+            string ctxt = isExport ? this._name : this.parent._name;
             if (_map is null) {
-                _map = tmp.map!(f => tuple(f, opt)).assocArray;
+                _map = tmp.map!((f) {
+                    if (_map_other.byKey.canFind(f))
+                        error(format("when %s %soption in Command `%s`, the new flag `%s` for %soption `%s` has been used for %soption `%s` in Command `%s`",
+                            etxt, txt, this._name, f, txt, opt.flags, rtxt, _map_other[f].flags, ctxt));
+                    return tuple(f, opt);
+                }).assocArray;
                 return true;
             }
             tmp.each!((f) {
                 if (_map.byKey.canFind(f))
-                this.error(format("the new flag `%s` for option `%s` has been used for option `%s`", f, opt.flags, _map[f].flags));
+                    error(format("when %s %soption in Command `%s`, the new flag `%s` for %soption `%s` has been used for %soption `%s` in Command `%s`",
+                        etxt, txt, this._name, f, txt, opt.flags, txt, _map[f].flags), ctxt);
+                if (_map_other.byKey.canFind(f))
+                    if (_map_other.byKey.canFind(f))
+                        error(format("when %s %soption in Command `%s`, the new flag `%s` for %soption `%s` has been used for %soption `%s` in Command `%s`",
+                            etxt, txt, this._name, f, txt, opt.flags, rtxt, _map_other[f].flags), ctxt);
             });
             tmp.each!((f) { _map[f] = opt; });
             return true;
@@ -3097,18 +3208,18 @@ public:
             string[] args_str = _arguments.map!(arg => arg.readableArgName).array;
             foreach (string key; this._argToOptNames) {
                 auto opt = _findOption(key);
-                args_str ~= "[(" ~ opt.name ~ ")]";
+                args_str ~= "[(" ~ (opt.variadic ? opt.name ~ "..." : opt.name) ~ ")]";
             }
             string[] seed = [
             ];
             return "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-            ]) ~
+                        ]) ~
                     (_commands.length ? "[command]" : [
-            ]) ~
+                        ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-            ])
+                        ])
             ).join(" ");
         }
         return this._usage;
@@ -3136,11 +3247,11 @@ public:
             command._usage = "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-            ]) ~
+                        ]) ~
                     (_commands.length ? "[command]" : [
-            ]) ~
+                        ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-            ])
+                        ])
             ).join(" ");
         }
         else
@@ -3150,10 +3261,14 @@ public:
 
     /// get sub command by name
     alias findCommand = _findCommand;
+    /// get sub command by name from all
+    alias findCommandFromAll = _findCommandFromAll;
     /// get option by name, short flag and long flag
     alias findOption = _findOption;
     /// get negate option by name, short flag and long flag
     alias findNOption = _findNegateOption;
+    /// get option by name, short flag and long flag from all
+    alias findOptionFromAll = _findOptionFromAll;
     /// get argument by name
     alias findArgument = _findArgument;
 }
@@ -3164,14 +3279,14 @@ unittest {
     cmd.description("this is test");
     assert("description: this is test" == cmd.description);
     cmd.description("this is test", [
-        "first": "1st",
-        "second": "2nd"
-    ]);
+            "first": "1st",
+            "second": "2nd"
+        ]);
     assert(
         cmd._argsDescription == [
-        "first": "1st",
-        "second": "2nd"
-    ]);
+            "first": "1st",
+            "second": "2nd"
+        ]);
     cmd.setVersion("0.0.1");
     // cmd.emit("command:version");
     // cmd.emit("option:version");

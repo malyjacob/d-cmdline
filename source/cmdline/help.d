@@ -154,20 +154,27 @@ class Help {
         foreach (keys, value; n_ph) {
             imex[keys] = value;
         }
-        const(string)[][T] r_imex;
+        string[][T] r_imex;
         T[string] result;
         foreach (keys, value; imex) {
             if (r_imex.byKey.canFind!(v => v is value)) {
-                r_imex[value] ~= keys;
+                r_imex[value] ~= cast(string[]) keys;
             }
             else {
-                r_imex[value] = keys;
+                r_imex[value] = cast(string[]) keys;
             }
         }
         foreach (value, keys; r_imex) {
             if (value.hidden)
                 continue;
-            result[keys.uniq.join(", ")] = value;
+            auto comp = (in string a, in string b) {
+                if (a.startsWith("--") && !b.startsWith("--"))
+                    return true;
+                else if (!a.startsWith("--") && !b.startsWith("--"))
+                    return false;
+                return a < b;
+            };
+            result[keys.sort!(comp).uniq.join(", ")] = value;
         }
         return cast(inout(T)[string]) result;
     }
@@ -315,7 +322,7 @@ package:
     }
 
     string optionDesc(in NegateOption opt) const {
-        return opt.description;
+        return "description: " ~ opt.description;
     }
 
     string argumentDesc(in Argument arg) const {

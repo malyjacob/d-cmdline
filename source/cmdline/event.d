@@ -3,6 +3,8 @@ module cmdline.event;
 import std.stdio;
 import cmdline.command;
 
+package:
+
 alias EventCallback_1 = void delegate();
 alias EventCallback_2 = void delegate(string val);
 alias EventCallback_3 = void delegate(bool isErrMode);
@@ -49,13 +51,23 @@ struct EventFn {
         this._fn4 = value;
         return this;
     }
+
+    auto get(T)() {
+        static if (is(T == EventCallback_1))
+            return this._fn1;
+        static if (is(T == EventCallback_2))
+            return this._fn2;
+        static if (is(T == EventCallback_3))
+            return this._fn3;
+        static if (is(T == EventCallback_4))
+            return this._fn4;
+        else
+            return null;
+    }
 }
 
 class EventManager {
-private:
     EventFn[string] eventMap;
-
-public:
     alias Self = typeof(this);
 
     Self on(string eventName, EventCallback_1 callback) {

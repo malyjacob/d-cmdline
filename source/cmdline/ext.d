@@ -35,7 +35,20 @@ enum __CMDLINE_EXT_isInnerValFieldOrResult__(T) = __CMDLINE_EXT_isInnerValField_
 /// check whether a type is the struct that can be the  
 /// container to store the parsed value from command line. 
 enum isOutputResult(T) = is(T == struct)
-    && T.stringof.length > 6 && (T.stringof)[$ - 6 .. $] == "Result";
+    && (__CMDLINE_EXT_IndexOfCmdlineAttr__!T != -1 || (T.stringof.length > 6 && (T.stringof)[$ - 6 .. $] == "Result"));
+
+template __CMDLINE_EXT_IndexOfCmdlineAttr__(T) {
+    int __CMDLINE_EXT_IndexOfCmdlineAttr__() {
+        alias AttrSeq = __traits(getAttributes, T);
+        int result = -1;
+        static foreach (idx, attr; AttrSeq) {
+            static if (attr.stringof == "package cmdline") {
+                result = cast(int) idx;
+            }
+        }
+        return result;
+    }
+}
 // && (FieldTypeTuple!T.length > 0 ? )
 // && anySatisfy!(__CMDLINE_EXT_isInnerValFieldOrResult__, FieldTypeTuple!T);
 
@@ -45,7 +58,7 @@ enum isOutputResult(T) = is(T == struct)
 ///   desc = the description
 mixin template DESC_ARG(alias field, string desc) {
     static assert(__CMDLINE_EXT_isInnerArgValField__!(typeof(field)));
-    debug pragma(msg, "enum DESC_ARG_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
+    // debug pragma(msg, "enum DESC_ARG_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
     mixin("enum DESC_ARG_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
 }
 
@@ -55,7 +68,7 @@ mixin template DESC_ARG(alias field, string desc) {
 ///   desc = the description
 mixin template DESC_OPT(alias field, string desc) {
     static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
-    debug pragma(msg, "enum DESC_OPT_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
+    // debug pragma(msg, "enum DESC_OPT_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
     mixin("enum DESC_OPT_" ~ field.stringof ~ "_ = \"" ~ desc ~ "\";");
 }
 
@@ -82,8 +95,8 @@ mixin template DESC(alias field, string desc) {
 mixin template DEFAULT(alias field, alias val) {
     alias ___FType___CMDLINE = typeof(field);
     static assert(is(typeof(val) : ___FType___CMDLINE.InnerType));
-    debug pragma(msg, "static " ~ typeof(val)
-            .stringof ~ " DEFAULT_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
+    // debug pragma(msg, "static " ~ typeof(val)
+    //         .stringof ~ " DEFAULT_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
     mixin("static " ~ typeof(val).stringof ~ " DEFAULT_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
 }
 
@@ -96,8 +109,8 @@ mixin template PRESET(alias field, alias val) {
     static assert(__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE && !is(
             ___FType___CMDLINE.InnerType == bool) && ___FType___CMDLINE.OPTIONAL);
     static assert(is(typeof(val) : ___FType___CMDLINE.InnerType));
-    debug pragma(msg, "static " ~ typeof(val)
-            .stringof ~ " PRESET_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
+    // debug pragma(msg, "static " ~ typeof(val)
+    //         .stringof ~ " PRESET_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
     mixin("static " ~ typeof(val).stringof ~ " PRESET_" ~ field.stringof ~ "_ = " ~ val.stringof ~ ";");
 }
 
@@ -109,7 +122,7 @@ mixin template ENV(alias field, string envKey) {
     alias ___FType___CMDLINE = typeof(field);
     static assert(__CMDLINE_EXT_isInnerOptValField__!___FType___CMDLINE && !is(
             ___FType___CMDLINE.InnerType == bool));
-    debug pragma(msg, "enum ENV_" ~ field.stringof ~ "_ = \"" ~ envKey ~ "\";");
+    // debug pragma(msg, "enum ENV_" ~ field.stringof ~ "_ = \"" ~ envKey ~ "\";");
     mixin("enum ENV_" ~ field.stringof ~ "_ = \"" ~ envKey ~ "\";");
 }
 
@@ -126,10 +139,10 @@ mixin template CHOICES(alias field, Args...) {
     import std.meta;
 
     static assert(allSatisfy!(isRegularType, Args));
-    debug pragma(msg, "static " ~ typeof(
-            Args[0])[].stringof ~
-            " CHOICES_" ~ field.stringof ~
-            "_ = " ~ [Args].stringof ~ ";");
+    // debug pragma(msg, "static " ~ typeof(
+    //         Args[0])[].stringof ~
+    //         " CHOICES_" ~ field.stringof ~
+    //         "_ = " ~ [Args].stringof ~ ";");
     mixin("static " ~ typeof(
             Args[0])[].stringof ~
             " CHOICES_" ~ field.stringof ~
@@ -148,8 +161,8 @@ mixin template RANGE(alias field, Args...) {
             ___FType___CMDLINE.InnerType == double));
     static assert(is(typeof(Args[0]) == typeof(Args[1])) && is(typeof(Args[0])));
     static assert(is(typeof(Args[0]) : ___FType___CMDLINE.InnerType) && Args[0] < Args[1]);
-    debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MIN_ = " ~ Args[0].stringof ~ ";");
-    debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MAX_ = " ~ Args[1].stringof ~ ";");
+    // debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MIN_ = " ~ Args[0].stringof ~ ";");
+    // debug pragma(msg, "enum RANGE_" ~ field.stringof ~ "_MAX_ = " ~ Args[1].stringof ~ ";");
     mixin("enum RANGE_" ~ field.stringof ~ "_MIN_ = " ~ Args[0].stringof ~ ";");
     mixin("enum RANGE_" ~ field.stringof ~ "_MAX_ = " ~ Args[1].stringof ~ ";");
 }
@@ -160,7 +173,7 @@ mixin template RANGE(alias field, Args...) {
 mixin template DISABLE_MERGE(alias field) {
     alias ___FType___CMDLINE = typeof(field);
     static assert(___FType___CMDLINE.VARIADIC);
-    debug pragma(msg, "enum DISABLE_MERGE_" ~ field.stringof ~ "_ = " ~ "true;");
+    // debug pragma(msg, "enum DISABLE_MERGE_" ~ field.stringof ~ "_ = " ~ "true;");
     mixin("enum DISABLE_MERGE_" ~ field.stringof ~ "_ = " ~ "true;");
 }
 
@@ -169,7 +182,7 @@ mixin template DISABLE_MERGE(alias field) {
 ///   field = the registered option in the type of `OptVal`
 mixin template HIDE(alias field) {
     static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
-    debug pragma(msg, "enum HIDE_" ~ field.stringof ~ "_ = " ~ "true;");
+    // debug pragma(msg, "enum HIDE_" ~ field.stringof ~ "_ = " ~ "true;");
     mixin("enum HIDE_" ~ field.stringof ~ "_ = " ~ "true;");
 }
 
@@ -181,11 +194,67 @@ mixin template HIDE(alias field) {
 ///   desc = the description of the negate option
 mixin template NEGATE(alias field, string shortFlag, string desc = "") {
     static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
-    debug pragma(msg, "enum NEGATE_" ~ field.stringof ~ "_ = \"" ~ shortFlag ~ "\";");
+    // debug pragma(msg, "enum NEGATE_" ~ field.stringof ~ "_ = \"" ~ shortFlag ~ "\";");
     mixin("enum NEGATE_" ~ field.stringof ~ "_ = \"" ~ shortFlag ~ "\";");
     static if (desc.length) {
         mixin("enum NEGATE_" ~ field.stringof ~ "_DESC_ =\"" ~ desc ~ "\";");
     }
+}
+
+/// set the conflicts options of an option
+/// Params:
+///   field = the target option in the type of `OptVal`
+mixin template CONFLICTS(alias field, OtherFields...) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    static foreach (f; OtherFields) {
+        static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f))
+                && field.stringof != f.stringof);
+    }
+    // alias CONFLICTS_field_ = OtherFields;
+    mixin("alias CONFLICTS_" ~ field.stringof ~ "_ = OtherFields;");
+}
+
+/// set the parser of option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   fn = the parser function
+mixin template PARSER(alias field, alias fn) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    // alias PARSER_field_ = fn;
+    mixin("alias PARSER_" ~ field.stringof ~ "_ = fn;");
+}
+
+/// set the processor of option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   fn = the processor function
+mixin template PROCESSOR(alias field, alias fn) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    // alias PROCESSOR_field_ = fn;
+    mixin("alias PROCESSOR_" ~ field.stringof ~ "_ = fn;");
+}
+
+/// set the reducer of option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   fn = the reducer function
+mixin template REDUCER(alias field, alias fn) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    // alias REDUCER_field_ = fn;
+    mixin("alias REDUCER_" ~ field.stringof ~ "_ = fn;");
+}
+
+/// set the option as action option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   fn = the action fn/delegate in the type of `void(T[] vals...)`
+///   endMode = set whether in endMode
+mixin template ACTION(alias field, alias fn, bool endMode = true) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    // enum N_ACTION_field_ = endMode;
+    mixin("enum N_ACTION_" ~ field.stringof ~ "_ = endMode;");
+    // alias F_ACTION_field_ = fn;
+    mixin("alias F_ACTION_" ~ field.stringof ~ "_ = fn;");
 }
 
 /// set the version string and enable the `version` sub-command and action-option
@@ -194,9 +263,9 @@ mixin template NEGATE(alias field, string shortFlag, string desc = "") {
 ///   flags = the flag of the version action-option which name would be the name of
 ///     the relevant sub-command. if not defied then the flag would be `--version -V`
 mixin template VERSION(string ver, string flags = "") {
-    debug pragma(msg, "enum VERSION_ = \"" ~ ver ~ "\";");
+    // debug pragma(msg, "enum VERSION_ = \"" ~ ver ~ "\";");
     mixin("enum VERSION_ = \"" ~ ver ~ "\";");
-    debug pragma(msg, "enum VERSION_FLAGS_ = \"" ~ flags ~ "\";");
+    // debug pragma(msg, "enum VERSION_FLAGS_ = \"" ~ flags ~ "\";");
     mixin("enum VERSION_FLAGS_ = \"" ~ flags ~ "\";");
 }
 
@@ -204,7 +273,7 @@ mixin template VERSION(string ver, string flags = "") {
 /// Params:
 ///   name = the alias
 mixin template ALIAS(string name) {
-    debug pragma(msg, "enum ALIAS_ = \"" ~ name ~ "\";");
+    // debug pragma(msg, "enum ALIAS_ = \"" ~ name ~ "\";");
     mixin("enum ALIAS_ = \"" ~ name ~ "\";");
 }
 
@@ -335,6 +404,34 @@ mixin template EXPORT_N(alias field, Flags...) {
     mixin("static string[] EXPORT_N_" ~ field.stringof ~ "_ = " ~ [Flags].stringof ~ ";");
 }
 
+/// apply `Command.importAs` to the command line container
+///Params: 
+///     flag = the flag of option for importing
+///     Flags = the new flags
+mixin template IMPORT(string flag, Flags...) {
+    import std.meta;
+    import std.traits;
+
+    enum bool ___is_str___CMDLINE__(alias arg) = isSomeString!(typeof(arg));
+    static assert(allSatisfy!(___is_str___CMDLINE__, Flags));
+    // alias IMPORT_flag_N_ = Flags;
+    mixin("alias IMPORT_" ~ flag ~ "_F_ = Flags;");
+}
+
+/// apply `Command.importNAs` to the command line container
+///Params: 
+///     flag = the flag ofnegate  option for importing
+///     Flags = the new flags
+mixin template IMPORT_N(string flag, Flags...) {
+    import std.meta;
+    import std.traits;
+
+    enum bool ___is_str___CMDLINE__(alias arg) = isSomeString!(typeof(arg));
+    static assert(allSatisfy!(___is_str___CMDLINE__, Flags));
+    // alias IMPORT_N_flag_N_ = Flags;
+    mixin("alias IMPORT_" ~ flag ~ "_N_ = Flags;");
+}
+
 /// enable gaining value from config file in json and set an option that specifies
 /// the directories where the config file should be
 /// Params:
@@ -342,7 +439,7 @@ mixin template EXPORT_N(alias field, Flags...) {
 ///     where the config file should be. if not defied then the flag would be
 ///     `-C, --config <config-dirs...>`
 mixin template CONFIG(string flags = "") {
-    debug pragma(msg, "enum CONFIG_FLAGS_ = \"" ~ flags ~ "\";");
+    // debug pragma(msg, "enum CONFIG_FLAGS_ = \"" ~ flags ~ "\";");
     mixin("enum CONFIG_FLAGS_ = \"" ~ flags ~ "\";");
 }
 
@@ -354,8 +451,8 @@ mixin template OPT_TO_ARG(Args...) {
     enum ___to_string___CMDLINE(alias var) = var.stringof;
     import std.meta;
 
-    debug pragma(msg, "static " ~ string[Args.length].stringof ~
-            " OPT_TO_ARG_ = " ~ [staticMap!(___to_string___CMDLINE, Args)].stringof ~ ";");
+    // debug pragma(msg, "static " ~ string[Args.length].stringof ~
+    //         " OPT_TO_ARG_ = " ~ [staticMap!(___to_string___CMDLINE, Args)].stringof ~ ";");
     mixin("static " ~ string[Args.length].stringof ~
             " OPT_TO_ARG_ = " ~ [staticMap!(___to_string___CMDLINE, Args)].stringof ~ ";");
 }
@@ -366,7 +463,10 @@ mixin template OPT_TO_ARG(Args...) {
 ///   SubCmd = the type that statisfies `isOutResult` and be registered by `SUB_CMD` 
 mixin template DEFAULT(SubCmd) {
     static assert(isOutputResult!SubCmd);
-    enum DEFAULT_ = (SubCmd.stringof)[0 .. $ - 6];
+    static if (__CMDLINE_EXT_IndexOfCmdlineAttr__!SubCmd != -1)
+        enum DEFAULT_ = SubCmd.stringof;
+    else
+        enum DEFAULT_ = (SubCmd.stringof)[0 .. $ - 6];
 }
 
 /// set the default sub-command which would act like the main-command except
@@ -381,11 +481,16 @@ mixin template DEFAULT(string subCmdName) {
 ///   SubCmds = the sub command containers that satisfies with `isOutputResult`
 mixin template SUB_CMD(SubCmds...) {
     import std.meta;
+    import std.string;
 
     static assert(SubCmds.length && allSatisfy!(isOutputResult, SubCmds));
     static foreach (sub; SubCmds) {
-        debug pragma(msg, sub.stringof ~ "* " ~ (sub.stringof)[0 .. $ - 6] ~ "Sub;");
-        mixin(sub.stringof ~ "* " ~ (sub.stringof)[0 .. $ - 6] ~ "Sub;");
+        static if (__CMDLINE_EXT_IndexOfCmdlineAttr__!sub != -1) {
+            mixin(sub.stringof ~ "* " ~ sub.stringof.toLower ~ "Sub;");
+        }
+        else {
+            mixin(sub.stringof ~ "* " ~ (sub.stringof[0 .. $ - 6]).toLower ~ "Sub;");
+        }
     }
 }
 
@@ -427,8 +532,13 @@ mixin template END() {
     enum __IS_FIELD_N_NAME__(string name) = name.length > 18
         && name[0 .. 18] == "__CMDLINE_FIELD_N_";
 
+    struct __OPT_HELPER_CONTAINER__(Args...) {
+        alias args = Args;
+    }
+
     enum __GET_FIELD_NAME__(string name) = name[18 .. $];
-    alias __GET_FIELD_FLAGS__(string name) = __traits(getMember, __SELF__, name);
+    alias __GET_FIELD_FLAGS__(string name) = __OPT_HELPER_CONTAINER__!(
+        __traits(getMember, __SELF__, name));
 
     alias __OPT_A_NAMES__ = staticMap!(__GET_FIELD_NAME__, Filter!(__IS_FIELD_A_NAME__, __traits(allMembers, __SELF__)));
     alias __OPT_E_NAMES__ = staticMap!(__GET_FIELD_NAME__, Filter!(__IS_FIELD_E_NAME__, __traits(allMembers, __SELF__)));
@@ -441,17 +551,22 @@ mixin template END() {
 
     static if (__OPT_E_NAMES__.length) {
         alias __OPT_E_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_E_NAME__, __traits(allMembers, __SELF__)));
-        debug pragma(msg, __OPT_E_FLAGS__);
+        // debug pragma(msg, __OPT_E_FLAGS__);
         static foreach (idx, nm; __OPT_E_NAMES__) {
-            mixin("static string[] EXPORT_" ~ nm ~ "_ = " ~ [__OPT_E_FLAGS__].stringof ~ ";");
+            mixin("static string[] EXPORT_" ~ nm ~ "_ = " ~ [
+                    __OPT_E_FLAGS__[idx].args
+                ].stringof ~ ";");
         }
     }
 
     static if (__OPT_N_NAMES__.length) {
         alias __OPT_N_FLAGS__ = staticMap!(__GET_FIELD_FLAGS__, Filter!(__IS_FIELD_N_NAME__, __traits(allMembers, __SELF__)));
-        debug pragma(msg, __OPT_N_FLAGS__);
+        // debug pragma(msg, __OPT_N_FLAGS__);
         static foreach (idx, nm; __OPT_N_NAMES__) {
-            mixin("static string[] EXPORT_N_" ~ nm ~ "_ = " ~ [__OPT_N_FLAGS__].stringof ~ ";");
+            mixin(
+                "static string[] EXPORT_N_" ~ nm ~ "_ = " ~ [
+                    __OPT_N_FLAGS__[idx].args
+                ].stringof ~ ";");
         }
     }
 }
@@ -613,19 +728,25 @@ struct OptVal(T, string shortAndVal, bool isMandatory = false) {
     // same as the result of `isValid`
     alias isValid this;
 
-    /// get the value of type `U`
-    /// `U` must be `T` or `bool`, by default `T`
-    auto get(U = T)() const if (is(U == T) || is(U == bool)) {
-        assert(isValid);
-        static if (is(U == bool)) {
-            assert(!_inner.isValueData);
+    /// get the value of type `U`, default `U` == `T`
+    /// `U` must be `T` or the Element Type of `T` if `T` is Array Type
+    /// if `U` is `bool`, this function return true when inner option value is valid and the `bool` value of
+    /// option is `true`, otherwise `false`
+    U get(U = T)() const
+    if (is(U == T) || (!is(U == void) && is(U == ElementType!T))) {
+        static if (is(U == bool))
+            return cast(U)(isValid && _inner.get!U);
+        else {
+            assert(isValid);
+            return _inner.get!U;
         }
-        return _inner.get!U;
     }
 
     /// get the value of type `bool`
-    auto getBool() {
-        return get!bool;
+    bool getBool()()
+            if (is(T == bool) || (hasMember!(typeof(this), "OPTIONAL") && OPTIONAL)) {
+        assert(isValid && isBool);
+        return _inner.get!bool;
     }
 
     /// assign the inner value through passing into `Option` variable
@@ -697,6 +818,7 @@ mixin template DEF_VAR_OPT(string name, T, string flag, Args...) {
 ///   Args = the configs
 mixin template DEF(string name, T, Args...) {
     import std.meta;
+    import std.string : join;
 
     static assert(allSatisfy!(__CMDLINE_isFieldDef__, Args));
 
@@ -710,12 +832,12 @@ mixin template DEF(string name, T, Args...) {
     static if (!is(__CMDLINE_getFiledById__!(-1, Args) == void)) {
         mixin("OptVal!(" ~ T.stringof ~ ", \"" ~ __CMDLINE_getFiledById__!(-1, Args).args ~ "\", "
                 ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
-        debug pragma(msg, "OptVal!(" ~ T.stringof ~ ", \"" ~ __CMDLINE_getFiledById__!(-1, Args).args ~ "\", "
-                ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+        // debug pragma(msg, "OptVal!(" ~ T.stringof ~ ", \"" ~ __CMDLINE_getFiledById__!(-1, Args).args ~ "\", "
+        //         ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
     }
     else {
         mixin("ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
-        debug pragma(msg, "ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
+        // debug pragma(msg, "ArgVal!(" ~ T.stringof ~ ", " ~ "__CMDLINE_FIELD_isOptional_" ~ name ~ ")" ~ name ~ ";");
     }
 
     mixin("alias " ~ "__CMDLINE_FIELD_F_" ~ name ~ "= " ~ name ~ ";");
@@ -779,8 +901,6 @@ mixin template DEF(string name, T, Args...) {
             mixin("alias " ~ "__CMDLINE_FIELD_N_" ~ name ~ " = decl.args;");
         }
         else static if (decl.__CMDLINE_FIELD_DEF__ == 12) {
-            import std.string : join;
-
             mixin IMPLIES_TRUE!(
                 mixin("__CMDLINE_FIELD_F_" ~ name),
                 mixin([decl.args].join(", "))
@@ -791,6 +911,33 @@ mixin template DEF(string name, T, Args...) {
                 mixin("__CMDLINE_FIELD_F_" ~ name),
                 mixin(decl.args[0]),
                 decl.args[1 .. $]
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 14) {
+            mixin("mixin CONFLICTS!(" ~ name ~ ", " ~ [decl.args].join(", ") ~ ");");
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 15) {
+            mixin PARSER!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 16) {
+            mixin PROCESSOR!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 17) {
+            mixin REDUCER!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 18) {
+            mixin ACTION!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
             );
         }
     }
@@ -905,6 +1052,36 @@ struct Implies_d(alias target, Args...) {
     alias args = AliasSeq!(target, Args);
 }
 
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `CONFLICTS`
+struct Conflicts_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 14;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `PARSER`
+struct Parser_d(alias fn) {
+    enum __CMDLINE_FIELD_DEF__ = 15;
+    alias args = fn;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `PROCESSOR`
+struct Processor_d(alias fn) {
+    enum __CMDLINE_FIELD_DEF__ = 16;
+    alias args = fn;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `REDUCER`
+struct Reducer_d(alias fn) {
+    enum __CMDLINE_FIELD_DEF__ = 17;
+    alias args = fn;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `ACTION`
+struct Action_d(alias actionFn, bool endMode = true) {
+    enum __CMDLINE_FIELD_DEF__ = 18;
+    alias args = AliasSeq!(actionFn, endMode);
+}
+
 enum __CMDLINE_isFieldDef__(T) = hasMember!(T, "__CMDLINE_FIELD_DEF__");
 template __CMDLINE_getFiledById__(int id, Types...) {
     enum __XX(T) = T.__CMDLINE_FIELD_DEF__ == id;
@@ -922,7 +1099,10 @@ private alias getMember(alias T, string flag) = __traits(getMember, T, flag);
 Command construct(T)() if (isOutputResult!T) {
     alias fnames = FieldNameTuple!T;
     alias ftypes = FieldTypeTuple!T;
-    Command cmd = createCommand(T.stringof[0 .. $ - 6]._tokeytab);
+    static if (__CMDLINE_EXT_IndexOfCmdlineAttr__!T != -1)
+        Command cmd = createCommand(T.stringof._tokeytab);
+    else
+        Command cmd = createCommand(T.stringof[0 .. $ - 6]._tokeytab);
     static if (hasStaticMember!(T, "__INNER_CMD__")) {
         T.__INNER_CMD__ = cmd;
     }
@@ -980,23 +1160,23 @@ Command construct(T)() if (isOutputResult!T) {
     static if (hasMember!(T, "SHOW_GLOBAL_OPTS_")) {
         cmd.showGlobalOptions;
     }
-    static foreach (index, Type; ftypes) {
-        static if (__CMDLINE_EXT_isInnerArgValField__!Type) {
-            {
-                mixin SetArgValField!(cmd, Type, T, index, fnames);
-            }
-        }
-        else static if (__CMDLINE_EXT_isInnerOptValField__!Type) {
-            {
-                mixin SetOptValField!(cmd, Type, T, index, fnames);
-            }
-        }
-        else static if (__CMDLINE_EXT_isInnerSubField__!Type) {
-            {
-                mixin SetSubCommand!(cmd, Type);
-            }
+
+    static foreach (Type; Filter!(__CMDLINE_EXT_isInnerArgValField__, ftypes)) {
+        {
+            mixin SetArgValField!(cmd, Type, T, staticIndexOf!(Type, ftypes), fnames);
         }
     }
+    static foreach (Type; Filter!(__CMDLINE_EXT_isInnerOptValField__, ftypes)) {
+        {
+            mixin SetOptValField!(cmd, Type, T, staticIndexOf!(Type, ftypes), fnames);
+        }
+    }
+    static foreach (Type; Filter!(__CMDLINE_EXT_isInnerSubField__, ftypes)) {
+        {
+            mixin SetSubCommand!(cmd, Type);
+        }
+    }
+
     static if (hasStaticMember!(T, "OPT_TO_ARG_")) {
         auto arr = getMember!(T, "OPT_TO_ARG_");
         import std.algorithm;
@@ -1005,20 +1185,21 @@ Command construct(T)() if (isOutputResult!T) {
         auto tmp = arr[].map!(str => _tokeytab(str)).array;
         cmd.argToOpt(tmp[0], tmp[1 .. $]);
     }
+
     enum __IS_EXT_SUB_CMD_PREFIX__(string name) = name.length > 12
         && name[0 .. 12] == "EXT_SUB_CMD_";
-    enum __GET_EXT_SLICE__(string name, size_t begin, size_t end = 3) = name[begin .. $ - end];
+    enum __GET_SLICE__(string name, size_t begin, size_t end = 3) = name[begin .. $ - end];
     alias __EXT_SUB_CMD_PREFIX_SEQ__ = Filter!(__IS_EXT_SUB_CMD_PREFIX__, __traits(allMembers, T));
     static if (__EXT_SUB_CMD_PREFIX_SEQ__.length) {
         static foreach (idx, ext; __EXT_SUB_CMD_PREFIX_SEQ__) {
             static if (idx % 4 == 0) {
                 {
-                    enum name = __GET_EXT_SLICE__!(ext, 12);
+                    enum name = __GET_SLICE__!(ext, 12);
                     enum len = name.length + 13;
-                    enum bin = __GET_EXT_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 1], len);
+                    enum bin = __GET_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 1], len);
                     enum desc = getMember!(T, ext);
                     enum dir = getMember!(T, __EXT_SUB_CMD_PREFIX_SEQ__[idx + 2]);
-                    enum aliasName = __GET_EXT_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 3], len);
+                    enum aliasName = __GET_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 3], len);
                     cmd.commandX(name._tokeytab, desc, [
                             "file": bin,
                             "dir": dir
@@ -1115,8 +1296,11 @@ mixin template InitOutputResultField(alias cmd, alias output, alias index, alias
         alias T = PointerTarget!Type;
         alias sfnames = FieldNameTuple!T;
         alias sftypes = FieldTypeTuple!T;
-        debug pragma(msg, T.stringof, " ", typeof(output).stringof);
-        Command sub = cmd.findCommand(T.stringof[0 .. $ - 6]._tokeytab);
+        // debug pragma(msg, T.stringof, " ", typeof(output).stringof);
+        static if (__CMDLINE_EXT_IndexOfCmdlineAttr__!T != -1)
+            Command sub = cmd.findCommand(T.stringof._tokeytab);
+        else
+            Command sub = cmd.findCommand(T.stringof[0 .. $ - 6]._tokeytab);
         auto xfn = () {
             if (cmd._called_sub == sub._name) {
                 static if (hasMember!(PointerTarget!(typeof(output)), "__IS_SUB_CMD_CALLED__")) {
@@ -1175,6 +1359,11 @@ mixin template SetArgValField(alias cmd, Type, T, alias index, fnames...) {
 }
 
 mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
+    import std.meta;
+    import std.array;
+    import std.algorithm;
+    import std.functional : toDelegate;
+
     alias IType = Type.InnerType;
     enum string opt_name = fnames[idnex];
     enum bool mandatory = Type.MANDATORY;
@@ -1192,6 +1381,12 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     enum string fnegate_desc = "NEGATE_" ~ opt_name ~ "_DESC_";
     enum string fexport = "EXPORT_" ~ opt_name ~ "_";
     enum string fexport_n = "EXPORT_N_" ~ opt_name ~ "_";
+    enum string fconflicts = "CONFLICTS_" ~ opt_name ~ "_";
+    enum string fparser = "PARSER_" ~ opt_name ~ "_";
+    enum string fprocessor = "PROCESSOR_" ~ opt_name ~ "_";
+    enum string freducer = "REDUCER_" ~ opt_name ~ "_";
+    enum string faction_n = "N_ACTION_" ~ opt_name ~ "_";
+    enum string faction_f = "F_ACTION_" ~ opt_name ~ "_";
     auto x0 = opt.makeMandatory(mandatory);
     static if (hasMember!(T, "DISABLE_MERGE_" ~ opt_name ~ '_')) {
         auto x1 = opt.merge(false);
@@ -1231,17 +1426,40 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     static if (hasMember!(T, fenv)) {
         auto x9 = opt.env(getMember!(T, fenv));
     }
-    auto x10 = cmd.addOption(opt);
+
+    static if (hasMember!(T, faction_n)) {
+        auto x10 = cmd.addActionOption!
+        (ElementType!(Parameters!(getMember!(T, faction_f))[0]))
+        (opt, toDelegate(getMember!(T, faction_f)), getMember!(T, faction_n));
+    }
+    else {
+        auto x10 = cmd.addOption(opt);
+    }
+
     auto x11 = nopt ? cmd.addOption(nopt) : cmd;
     static if (hasStaticMember!(T, fexport)) {
-        auto x12 = cmd.exportAs(opt_name, getMember!(T, fexport));
+        auto x12 = cmd.exportAs(kname, getMember!(T, fexport));
     }
     static if (hasStaticMember!(T, fexport_n)) {
-        auto x13 = cmd.exportNAs(opt_name, getMember!(T, fexport_n));
+        auto x13 = cmd.exportNAs(kname, getMember!(T, fexport_n));
     }
-    import std.meta;
-    import std.array;
-    import std.algorithm;
+
+    enum __to__stringof__(alias f) = f.stringof;
+    static if (hasMember!(T, fconflicts)) {
+        auto x14 = opt.conflicts([
+            staticMap!(__to__stringof__, getMember!(T, fconflicts))
+        ].map!_tokeytab.array);
+    }
+
+    static if (hasMember!(T, fparser)) {
+        auto x15 = opt.parser!(getMember!(T, fparser));
+    }
+    static if (hasMember!(T, fprocessor)) {
+        auto x16 = opt.processor!(getMember!(T, fprocessor));
+    }
+    static if (hasMember!(T, freducer)) {
+        auto x17 = opt.processReducer!(getMember!(T, freducer));
+    }
 
     enum __IS_IMPLIES_TRUE_FIELD_NAME__(string name) = name.length > 13 + opt_name.length &&
         name[0 .. 13 + opt_name.length] == "IMPLIES_TRUE_" ~ opt_name;
@@ -1272,6 +1490,16 @@ mixin template SetSubCommand(alias cmd, Type) {
     alias SubT = PointerTarget!Type;
     Command sub = construct!SubT;
     auto x = cmd.addCommand(sub);
+    enum __IS_IMPORT_PREFIX__(string name) = name.length > 7 && name[0 .. 7] == "IMPORT_";
+    static foreach (idx, imp; Filter!(__IS_IMPORT_PREFIX__, __traits(allMembers, SubT))) {
+        mixin("string name_" ~ idx.stringof ~ " = imp[7 .. $ - 3]._tokeytab;");
+        static if (imp[$ - 3 .. $] == "_N_")
+            mixin(
+                "auto x" ~ idx.stringof ~ " = sub.importNAs(name_" ~ idx.stringof ~ ", getMember!(SubT, imp));");
+        else
+            mixin(
+                "auto x" ~ idx.stringof ~ " = sub.importAs(name_" ~ idx.stringof ~ ", getMember!(SubT, imp));");
+    }
 }
 
 string _tokeytab(string from) {

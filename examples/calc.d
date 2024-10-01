@@ -26,7 +26,14 @@ version (CMDLINE_CLASSIC) {
             .rangeOf(0.0, 1024.0)
             .defaultVal(0.0);
 
+        Option info_opt = createOption!string("--info, -i [info-str]", "the action option to info");
+
         program.addOptions(operator_opt, first_opt, second_opt);
+
+        program.addActionOption(info_opt,
+            (string[] vals...) {
+            writefln("invoked info: `%s`", vals.length ? vals[0] : "");
+        });
 
         program.argToOpt("operator", "first", "second");
 
@@ -62,7 +69,7 @@ version (CMDLINE_CLASSIC) {
     }
 }
 else {
-    struct CalcResult {
+    @cmdline struct Calc {
         mixin BEGIN;
         mixin DESC!"simple calculator for baisc binary computation";
         mixin VERSION!"1.0.1";
@@ -93,6 +100,14 @@ else {
             Range_d!(0.0, 1024.0),
             Default_d!1.0,
             ToArg_d,
+        );
+
+        mixin DEF_OPT!(
+            "info", string, "-i [info-str]",
+            Desc_d!"the action option to info",
+            Action_d!((string[] vals...) {
+                writefln("invoked info: `%s`", vals.length ? vals[0] : "");
+            })
         );
 
         mixin END;
@@ -126,5 +141,5 @@ else {
         }
     }
 
-    mixin CMDLINE_MAIN!CalcResult;
+    mixin CMDLINE_MAIN!Calc;
 }

@@ -33,7 +33,7 @@ version (CMDLINE_CLASSIC) {
 
 }
 else {
-    struct CheeseResult {
+    @cmdline struct Cheese {
         mixin BEGIN;
         mixin SORT_OPTS;
 
@@ -66,5 +66,5 @@ else {
         }
     }
 
-    mixin CMDLINE_MAIN!CheeseResult;
+    mixin CMDLINE_MAIN!Cheese;
 }

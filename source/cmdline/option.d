@@ -68,6 +68,10 @@ enum Source {
     None
 }
 
+package enum InnerType {
+    BOOL, INT, DOUBLE, STRING
+}
+
 /// the callback for parsing the `string` value to the target type
 alias ParseArgFn(Target) = Target function(string str);
 /// furhter callback after using `ParseArgFn`
@@ -126,6 +130,8 @@ package:
     bool mandatory;
 
     string flags;
+
+    InnerType innerType;
 
     bool required;
     bool optional;
@@ -223,16 +229,17 @@ public:
     /// Params:
     ///   name = the name of the option that conflicts with this option
     /// Returns: `Self` for chain call
-    Self conflicts(string name) {
-        this.conflictsWith ~= name;
-        return this;
-    }
+    // Self conflicts(string name) {
+    //     this.conflictsWith ~= name;
+    //     return this;
+    // }
 
-    /// specify the name of the options that conflicts with this option
+    /// specify the namse of the options that conflicts with this option
     /// Params:
     ///   names = the names of the option that conflicts with this option
     /// Returns: `Self` for chain call
-    Self conflicts(const string[] names) {
+    Self conflicts(const string[] names...) {
+        assert(names.length);
         this.conflictsWith ~= names;
         return this;
     }
@@ -964,11 +971,11 @@ unittest {
     Option[] opts = [
         createOption!bool("-m, --mixed").defaultVal.implyVal(false),
         createOption!int("-m, --mixed [dig]", "")
-            .defaultVal.parser!((string v) => v.to!(int)).cliVal("123"),
+        .defaultVal.parser!((string v) => v.to!(int)).cliVal("123"),
         createOption!int("-m, --mixed <dig...>", "").defaultVal([123])
-            .parser!((string v) => v.to!(int))
-            .processor!((int a) => a + 1)
-            .cliVal("12", "13", "14")
+        .parser!((string v) => v.to!(int))
+        .processor!((int a) => a + 1)
+        .cliVal("12", "13", "14")
     ];
     opts[1].found = opts[2].found = true;
     opts.each!(v => v.initialize);
@@ -985,6 +992,7 @@ package class BoolOption : Option {
 
     this(string flags, string description) {
         super(flags, description);
+        this.innerType = InnerType.BOOL;
         if (!this.isBoolean || this.variadic) {
             error(
                 "the value flag must not exist and the flag cannot contain `...` using `new BoolOption`");
@@ -1125,6 +1133,9 @@ package class ValueOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
+        with(InnerType) {
+            mixin("this.innerType = "  ~ T.stringof.toUpper ~ ";");
+        }
         if (this.isBoolean || this.variadic) {
             error(
                 "the value flag must exist and the flag cannot contain `...` using `new ValueOption!T`");
@@ -1413,7 +1424,8 @@ package class ValueOption(T) : Option {
     }
 
     override string typeStr() const {
-        return "type: " ~ (this.isOptional ? T.stringof ~ "|true" : T.stringof);
+        alias test_bool = visit!((bool v) => true, (const T v) => false);
+        return "type: " ~ (this.isOptional && test_bool(presetArg) ? T.stringof ~ "|true" : T.stringof);
     }
 
     override string defaultValStr() const {
@@ -1483,6 +1495,9 @@ package class VariadicOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
+        with(InnerType) {
+            mixin("this.innerType = "  ~ T.stringof.toUpper ~ ";");
+        }
         if (this.isBoolean || !this.variadic) {
             error(
                 "the value flag must exist and the flag must contain `...` using `new VariadicOption!T`");
@@ -1836,7 +1851,8 @@ package class VariadicOption(T) : Option {
     }
 
     override string typeStr() const {
-        return "type: " ~ (isOptional ? T.stringof ~ "[]|true" : T.stringof ~ "[]");
+        alias test_bool = visit!((const T[] v) => false, (bool v) => true);
+        return "type: " ~ (isOptional && test_bool(presetArg) ? T.stringof ~ "[]|true" : T.stringof ~ "[]");
     }
 
     override string defaultValStr() const {

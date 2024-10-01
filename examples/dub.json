@@ -150,6 +150,11 @@
             "name": "ext",
             "targetName": "ext",
             "mainSourceFile": "./ext.d"
+        },
+        {
+            "name": "imex",
+            "targetName": "imex",
+            "mainSourceFile": "./imex.d"
         }
     ]
 }
