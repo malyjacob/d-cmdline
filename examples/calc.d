@@ -105,12 +105,14 @@ else {
         mixin DEF_OPT!(
             "info", string, "-i [info-str]",
             Desc_d!"the action option to info",
-            Action_d!((string[] vals...) {
-                writefln("invoked info: `%s`", vals.length ? vals[0] : "");
-            })
+            Action_d!(xInfo)
         );
 
         mixin END;
+
+        static void xInfo(string[] vals...) {
+            writefln("invoked info: `%s`", vals.length ? vals[0] : "");
+        }
 
         void action() {
             auto f = first.get;

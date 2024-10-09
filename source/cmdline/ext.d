@@ -204,6 +204,7 @@ mixin template NEGATE(alias field, string shortFlag, string desc = "") {
 /// set the conflicts options of an option
 /// Params:
 ///   field = the target option in the type of `OptVal`
+///   OtherFields = the conflicts options
 mixin template CONFLICTS(alias field, OtherFields...) {
     static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
     static foreach (f; OtherFields) {
@@ -212,6 +213,34 @@ mixin template CONFLICTS(alias field, OtherFields...) {
     }
     // alias CONFLICTS_field_ = OtherFields;
     mixin("alias CONFLICTS_" ~ field.stringof ~ "_ = OtherFields;");
+}
+
+/// set the needs options of an option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   OtherFields = the needed options
+mixin template NEEDS(alias field, OtherFields...) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    static foreach (f; OtherFields) {
+        static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f))
+                && field.stringof != f.stringof);
+    }
+    // alias NEEDS_field_ = OtherFields;
+    mixin("alias NEEDS_" ~ field.stringof ~ "_ = OtherFields;");
+}
+
+/// set the needs one of options of an option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   OtherFields = the needed one of options
+mixin template NEED_ONEOF(alias field, OtherFields...) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    static foreach (f; OtherFields) {
+        static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f))
+                && field.stringof != f.stringof);
+    }
+    // alias NEEDS_field_ = OtherFields;
+    mixin("alias NEED_ONEOF_" ~ field.stringof ~ "_ = OtherFields;");
 }
 
 /// set the parser of option
@@ -254,7 +283,7 @@ mixin template ACTION(alias field, alias fn, bool endMode = true) {
     // enum N_ACTION_field_ = endMode;
     mixin("enum N_ACTION_" ~ field.stringof ~ "_ = endMode;");
     // alias F_ACTION_field_ = fn;
-    mixin("alias F_ACTION_" ~ field.stringof ~ "_ = fn;");
+    mixin("alias F_ACTION_" ~ field.stringof ~ "_ = ACTFN!fn;");
 }
 
 /// set the version string and enable the `version` sub-command and action-option
@@ -940,6 +969,18 @@ mixin template DEF(string name, T, Args...) {
                 decl.args
             );
         }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 19) {
+            mixin NEEDS!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 20) {
+            mixin NEED_ONEOF!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
     }
 }
 
@@ -1080,6 +1121,18 @@ struct Reducer_d(alias fn) {
 struct Action_d(alias actionFn, bool endMode = true) {
     enum __CMDLINE_FIELD_DEF__ = 18;
     alias args = AliasSeq!(actionFn, endMode);
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `NEEDS`
+struct Needs_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 19;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `NEED_ONEOF`
+struct NeedOneOf_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 20;
+    alias args = Args;
 }
 
 enum __CMDLINE_isFieldDef__(T) = hasMember!(T, "__CMDLINE_FIELD_DEF__");
@@ -1382,6 +1435,8 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     enum string fexport = "EXPORT_" ~ opt_name ~ "_";
     enum string fexport_n = "EXPORT_N_" ~ opt_name ~ "_";
     enum string fconflicts = "CONFLICTS_" ~ opt_name ~ "_";
+    enum string fneeds = "NEEDS_" ~ opt_name ~ "_";
+    enum string fneed_oneof = "NEED_ONEOF_" ~ opt_name ~ "_";
     enum string fparser = "PARSER_" ~ opt_name ~ "_";
     enum string fprocessor = "PROCESSOR_" ~ opt_name ~ "_";
     enum string freducer = "REDUCER_" ~ opt_name ~ "_";
@@ -1450,15 +1505,24 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
             staticMap!(__to__stringof__, getMember!(T, fconflicts))
         ].map!_tokeytab.array);
     }
-
+    static if (hasMember!(T, fneeds)) {
+        auto x15 = opt.needs([
+            staticMap!(__to__stringof__, getMember!(T, fneeds))
+        ].map!_tokeytab.array);
+    }
+    static if (hasMember!(T, fneeds)) {
+        auto x16 = opt.needOneOf([
+            staticMap!(__to__stringof__, getMember!(T, fneeds))
+        ].map!_tokeytab.array);
+    }
     static if (hasMember!(T, fparser)) {
-        auto x15 = opt.parser!(getMember!(T, fparser));
+        auto x17 = opt.parser!(getMember!(T, fparser));
     }
     static if (hasMember!(T, fprocessor)) {
-        auto x16 = opt.processor!(getMember!(T, fprocessor));
+        auto x18 = opt.processor!(getMember!(T, fprocessor));
     }
     static if (hasMember!(T, freducer)) {
-        auto x17 = opt.processReducer!(getMember!(T, freducer));
+        auto x19 = opt.processReducer!(getMember!(T, freducer));
     }
 
     enum __IS_IMPLIES_TRUE_FIELD_NAME__(string name) = name.length > 13 + opt_name.length &&
@@ -1548,4 +1612,8 @@ public mixin template IMPLIES(alias srcField, alias targetField, values...) {
         // alias IMPLIES_VALUE_name_targetName_R_ = values;
         mixin("alias IMPLIES_VALUE_" ~ srcField.stringof ~ "_" ~ targetField.stringof ~ "_R_ = values;");
     }
+}
+
+public template ACTFN(alias fn) {
+    alias ACTFN = (Parameters!(fn)[0] vals...) => fn(vals);
 }

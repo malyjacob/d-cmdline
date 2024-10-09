@@ -1366,6 +1366,7 @@ package:
             .filter!(opt => opt.settled || opt.isValid)
             .each!((opt) { opt.initialize; });
         command._checkConfilctOption();
+        command._checkNeedOption();
         command._checkMissingMandatoryOption();
         command.opts = command._options
             .filter!(opt => opt.settled)
@@ -1914,12 +1915,33 @@ package:
             foreach (name; confilcts) {
                 opts.each!((o) {
                     if (opt !is o && o.name == name)
-                        parsingError(format!"the values of the option `%s` and `%s` cannot both be valid"(name, opt
-                            .name));
+                        parsingError(format!"the values of the option `%s` and `%s` cannot both be valid"(name, opt.name));
                 });
             }
         };
         opts.each!(is_conflict);
+    }
+
+    void _checkNeedOption() const {
+        auto opts = this._options
+            .filter!(opt => opt.settled && (!opt.isBoolean || opt.get!bool))
+            .array;
+        foreach (opt; opts) {
+            const string[] needs = opt.needWith;
+            foreach (string need; needs) {
+                if(!opts.canFind!(o => opt !is o && o.name == need)) {
+                    parsingError(format("the value of option `%s` must be valid, when the value of `%s` is settled!",
+                        need, opt.name));
+                }
+            }
+            const string[] need_oneofs = opt.needOneOfWith;
+            auto flg = need_oneofs.any!((need) {
+                return opts.canFind!(o => opt !is o && o.name == need);
+            });
+            if (need_oneofs.length && !flg)
+                parsingError(format("at least on of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
+                        need_oneofs.to!string, opt.name));
+        }
     }
 
     void parseArguments(in string[] _args) {

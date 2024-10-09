@@ -145,6 +145,8 @@ package:
     bool hidden;
 
     string[] conflictsWith;
+    string[] needWith;
+    string[] needOneOfWith;
     string envKey;
     ImplyOptionMap implyMap;
 
@@ -189,6 +191,7 @@ package:
         }
         this.hidden = false;
         this.conflictsWith = [];
+        this.needWith = [];
         this.implyMap = null;
         this.envKey = "";
         this.found = false;
@@ -225,15 +228,6 @@ public:
         return short_flag.empty ? false : short_flag == nshort_flag;
     }
 
-    /// specify the name of the option that conflicts with this option
-    /// Params:
-    ///   name = the name of the option that conflicts with this option
-    /// Returns: `Self` for chain call
-    // Self conflicts(string name) {
-    //     this.conflictsWith ~= name;
-    //     return this;
-    // }
-
     /// specify the namse of the options that conflicts with this option
     /// Params:
     ///   names = the names of the option that conflicts with this option
@@ -241,6 +235,26 @@ public:
     Self conflicts(const string[] names...) {
         assert(names.length);
         this.conflictsWith ~= names;
+        return this;
+    }
+
+    /// specify the names of option that this option need with
+    /// Params:
+    ///   names = the names of option that this option need with
+    /// Returns: `Self` for chain call
+    Self needs(const string[] names...) {
+        assert(names.length);
+        this.needWith ~= names;
+        return this;
+    }
+
+    /// specify the nnames of option that this option need one of with
+    /// Params:
+    ///   names = the nnames of option that this option need one of with
+    /// Returns: `Self` for chain call
+    Self needOneOf(const string[] names...) {
+        assert(names.length);
+        this.needOneOfWith ~= names;
         return this;
     }
 

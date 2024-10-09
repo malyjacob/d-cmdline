@@ -34,7 +34,9 @@
                 "\"$DUB\" build -c config",
                 "\"$DUB\" build -c varmerge",
                 "\"$DUB\" build -c strutil",
-                "\"$DUB\" build -c ext"
+                "\"$DUB\" build -c ext",
+                "\"$DUB\" build -c imex",
+                "\"$DUB\" build -c just"
             ]
         },
         {
@@ -58,7 +60,9 @@
                 "\"$DUB\" build -c config -b release",
                 "\"$DUB\" build -c varmerge -b release",
                 "\"$DUB\" build -c strutil -b release",
-                "\"$DUB\" build -c ext -b release"
+                "\"$DUB\" build -c ext -b release",
+                "\"$DUB\" build -c imex -b release",
+                "\"$DUB\" build -c just -b release"
             ]
         },
         {
@@ -155,6 +159,11 @@
             "name": "imex",
             "targetName": "imex",
             "mainSourceFile": "./imex.d"
+        },
+        {
+            "name": "just",
+            "targetName": "just",
+            "mainSourceFile": "./just.d"
         }
     ]
 }
