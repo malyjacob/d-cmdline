@@ -1934,12 +1934,19 @@ package:
                         need, opt.name));
                 }
             }
-            const string[] need_oneofs = opt.needOneOfWith;
-            auto flg = need_oneofs.any!((need) {
+            const string[] need_anyofs = opt.needAnyOfWith;
+            auto anyof_flg = need_anyofs.any!((need) {
                 return opts.canFind!(o => opt !is o && o.name == need);
             });
-            if (need_oneofs.length && !flg)
-                parsingError(format("at least on of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
+            if (need_anyofs.length && !anyof_flg)
+                parsingError(format("at least one of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
+                        need_anyofs.to!string, opt.name));
+            const string[] need_oneofs = opt.needOneOfWith;
+            auto oneof_flg = need_oneofs.find!((need) {
+                return opts.canFind!(o => opt !is o && o.name == need);
+            });
+            if (need_oneofs.length && oneof_flg.length != 1)
+                parsingError(format("only one of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
                         need_oneofs.to!string, opt.name));
         }
     }

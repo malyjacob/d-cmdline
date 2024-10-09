@@ -147,6 +147,7 @@ package:
     string[] conflictsWith;
     string[] needWith;
     string[] needOneOfWith;
+    string[] needAnyOfWith;
     string envKey;
     ImplyOptionMap implyMap;
 
@@ -245,16 +246,29 @@ public:
     Self needs(const string[] names...) {
         assert(names.length);
         this.needWith ~= names;
+        this.needWith = this.needWith.uniq.array;
         return this;
     }
 
-    /// specify the nnames of option that this option need one of with
+    /// specify the names of option that this option need one of with
     /// Params:
-    ///   names = the nnames of option that this option need one of with
+    ///   names = the names of option that this option need one of with
     /// Returns: `Self` for chain call
     Self needOneOf(const string[] names...) {
         assert(names.length);
         this.needOneOfWith ~= names;
+        this.needOneOfWith = this.needOneOfWith.uniq.array;
+        return this;
+    }
+
+    /// specify the names of option that this option need any of with
+    /// Params:
+    ///   names = the names of option that this option need any of with
+    /// Returns: `Self` for chain call
+    Self needAnyOf(const string[] names...) {
+        assert(names.length);
+        this.needAnyOfWith ~= names;
+        this.needAnyOfWith = this.needAnyOfWith.uniq.array;
         return this;
     }
 

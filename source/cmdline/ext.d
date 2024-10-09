@@ -239,8 +239,22 @@ mixin template NEED_ONEOF(alias field, OtherFields...) {
         static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f))
                 && field.stringof != f.stringof);
     }
-    // alias NEEDS_field_ = OtherFields;
+    // alias NEED_ONEOF_field_ = OtherFields;
     mixin("alias NEED_ONEOF_" ~ field.stringof ~ "_ = OtherFields;");
+}
+
+/// set the needs any of options of an option
+/// Params:
+///   field = the target option in the type of `OptVal`
+///   OtherFields = the needed any of options
+mixin template NEED_ANYOF(alias field, OtherFields...) {
+    static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(field)));
+    static foreach (f; OtherFields) {
+        static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f))
+                && field.stringof != f.stringof);
+    }
+    // alias NEED_ANYOF_field_ = OtherFields;
+    mixin("alias NEED_ANYOF_" ~ field.stringof ~ "_ = OtherFields;");
 }
 
 /// set the parser of option
@@ -981,6 +995,12 @@ mixin template DEF(string name, T, Args...) {
                 decl.args
             );
         }
+        else static if (decl.__CMDLINE_FIELD_DEF__ == 21) {
+            mixin NEED_ANYOF!(
+                mixin("__CMDLINE_FIELD_F_" ~ name),
+                decl.args
+            );
+        }
     }
 }
 
@@ -1132,6 +1152,12 @@ struct Needs_d(Args...) {
 /// used inside the bracket of `DEF`, `DEF_OPT`, see `NEED_ONEOF`
 struct NeedOneOf_d(Args...) {
     enum __CMDLINE_FIELD_DEF__ = 20;
+    alias args = Args;
+}
+
+/// used inside the bracket of `DEF`, `DEF_OPT`, see `NEED_ANYOF`
+struct NeedAnyOf_d(Args...) {
+    enum __CMDLINE_FIELD_DEF__ = 21;
     alias args = Args;
 }
 
@@ -1437,6 +1463,7 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
     enum string fconflicts = "CONFLICTS_" ~ opt_name ~ "_";
     enum string fneeds = "NEEDS_" ~ opt_name ~ "_";
     enum string fneed_oneof = "NEED_ONEOF_" ~ opt_name ~ "_";
+    enum string fneed_anyof = "NEED_ANYOF_" ~ opt_name ~ "_";
     enum string fparser = "PARSER_" ~ opt_name ~ "_";
     enum string fprocessor = "PROCESSOR_" ~ opt_name ~ "_";
     enum string freducer = "REDUCER_" ~ opt_name ~ "_";
@@ -1510,19 +1537,25 @@ mixin template SetOptValField(alias cmd, Type, T, alias idnex, fnames...) {
             staticMap!(__to__stringof__, getMember!(T, fneeds))
         ].map!_tokeytab.array);
     }
-    static if (hasMember!(T, fneeds)) {
+    static if (hasMember!(T, fneed_oneof)) {
         auto x16 = opt.needOneOf([
-            staticMap!(__to__stringof__, getMember!(T, fneeds))
+            staticMap!(__to__stringof__, getMember!(T, fneed_oneof))
         ].map!_tokeytab.array);
     }
+    static if (hasMember!(T, fneed_anyof)) {
+        auto x17 = opt.needAnyOf([
+            staticMap!(__to__stringof__, getMember!(T, fneed_anyof))
+        ].map!_tokeytab.array);
+    }
+
     static if (hasMember!(T, fparser)) {
-        auto x17 = opt.parser!(getMember!(T, fparser));
+        auto x18 = opt.parser!(getMember!(T, fparser));
     }
     static if (hasMember!(T, fprocessor)) {
-        auto x18 = opt.processor!(getMember!(T, fprocessor));
+        auto x19 = opt.processor!(getMember!(T, fprocessor));
     }
     static if (hasMember!(T, freducer)) {
-        auto x19 = opt.processReducer!(getMember!(T, freducer));
+        auto x20 = opt.processReducer!(getMember!(T, freducer));
     }
 
     enum __IS_IMPLIES_TRUE_FIELD_NAME__(string name) = name.length > 13 + opt_name.length &&
