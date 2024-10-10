@@ -36,7 +36,8 @@
                 "\"$DUB\" build -c strutil",
                 "\"$DUB\" build -c ext",
                 "\"$DUB\" build -c imex",
-                "\"$DUB\" build -c just"
+                "\"$DUB\" build -c just",
+                "\"$DUB\" build -c gcalc"
             ]
         },
         {
@@ -62,7 +63,8 @@
                 "\"$DUB\" build -c strutil -b release",
                 "\"$DUB\" build -c ext -b release",
                 "\"$DUB\" build -c imex -b release",
-                "\"$DUB\" build -c just -b release"
+                "\"$DUB\" build -c just -b release",
+                "\"$DUB\" build -c gcalc -b release"
             ]
         },
         {
@@ -164,6 +166,11 @@
             "name": "just",
             "targetName": "just",
             "mainSourceFile": "./just.d"
+        },
+        {
+            "name": "gcalc",
+            "targetName": "gcalc",
+            "mainSourceFile": "./gcalc.d"
         }
     ]
 }

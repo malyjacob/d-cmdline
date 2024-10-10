@@ -150,6 +150,8 @@ package:
     Option[string] _export_map = null;
     NegateOption[string] _export_n_map = null;
 
+    string[] _anyOptsNeeded = null;
+
     this(string name) {
         this._name = name;
     }
@@ -703,6 +705,59 @@ public:
                     this._exitSuccessfully;
             };
         }
+        return this;
+    }
+
+    /// set the names of options whose value must at least one be valid
+    /// Params:
+    ///   names =  the names of options whose value must at least one be valid
+    /// Returns: `Self` for chain call
+    Self needAnyOptions(string[] names...) {
+        assert(names.all!(n => _findOption(n)));
+        this._anyOptsNeeded ~= names;
+        this._anyOptsNeeded = this._anyOptsNeeded.uniq.array;
+        return this;
+    }
+
+    alias needAnyOfOptions = needAnyOptions;
+
+    /// set the names of option which conflicts with each other
+    /// Params:
+    ///   names = the names of option which conflicts with each other
+    /// Returns: `Self` for chain call
+    Self conflictOptions(string[] names...) {
+        auto nms = names.uniq;
+        assert(nms.all!(n => _findOption(n)));
+        nms.each!((n) {
+            Option opt = _findOption(n);
+            opt.conflicts(nms.filter!(nm => nm != n).array);
+        });
+        return this;
+    }
+
+    /// set the names of options whose value must only one be valid
+    /// Params:
+    ///   names = the names of options whose value must only one be valid
+    /// Returns: `Self` for chain call
+    Self needOneOfOptions(string[] names...) {
+        auto nms = names.uniq.array;
+        assert(nms.all!(n => _findOption(n)));
+        needAnyOptions(nms);
+        conflictOptions(nms);
+        return this;
+    }
+
+    /// set the names of options that depends on each other
+    /// Params:
+    ///   names = the names of options that depends on each other
+    /// Returns: `Self` for chain call
+    Self groupOptions(string[] names) {
+        auto nms = names.uniq;
+        assert(nms.all!(n => _findOption(n)));
+        nms.each!((n) {
+            Option opt = _findOption(n);
+            opt.needs(nms.filter!(nm => nm != n).array);
+        });
         return this;
     }
 
@@ -1926,6 +1981,10 @@ package:
         auto opts = this._options
             .filter!(opt => opt.settled && (!opt.isBoolean || opt.get!bool))
             .array;
+        auto flg = this._anyOptsNeeded.any!(n => opts.canFind!(opt => opt.name == n));
+        if (this._anyOptsNeeded.length && !flg)
+            parsingError(format("at least one of the options whose name appear on `%s` must be valid",
+                        this._anyOptsNeeded.to!string));
         foreach (opt; opts) {
             const string[] needs = opt.needWith;
             foreach (string need; needs) {
@@ -1942,9 +2001,9 @@ package:
                 parsingError(format("at least one of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
                         need_anyofs.to!string, opt.name));
             const string[] need_oneofs = opt.needOneOfWith;
-            auto oneof_flg = need_oneofs.find!((need) {
+            auto oneof_flg = need_oneofs.filter!((need) {
                 return opts.canFind!(o => opt !is o && o.name == need);
-            });
+            }).array;
             if (need_oneofs.length && oneof_flg.length != 1)
                 parsingError(format("only one of the options whose name appear on `%s` must be valid, when the value of `%s` is settled!",
                         need_oneofs.to!string, opt.name));

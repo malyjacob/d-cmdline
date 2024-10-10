@@ -236,6 +236,7 @@ public:
     Self conflicts(const string[] names...) {
         assert(names.length);
         this.conflictsWith ~= names;
+        this.conflictsWith = this.conflictsWith.uniq.array;
         return this;
     }
 
