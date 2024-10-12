@@ -751,7 +751,7 @@ public:
     /// Params:
     ///   names = the names of options that depends on each other
     /// Returns: `Self` for chain call
-    Self groupOptions(string[] names) {
+    Self groupOptions(string[] names...) {
         auto nms = names.uniq;
         assert(nms.all!(n => _findOption(n)));
         nms.each!((n) {

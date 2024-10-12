@@ -554,44 +554,59 @@ mixin template SUB_CMD(SubCmds...) {
     }
 }
 
+import std.string : startsWith;
+
+enum __IS_CONFLICT_OPTS_NAME__(string name) = name.startsWith("CONFLICT_OPTS_");
+enum __IS_NEED_ANYOF_OPTS_NAME__(string name) = name.startsWith("NEED_ANYOF_OPTS_");
+enum __IS_NEED_ONEOF_OPTS_NAME__(string name) = name.startsWith("NEED_ONEOF_OPTS_");
+enum __IS_GROUP_OPTS_NAME__(string name) = name.startsWith("GROUP_OPTS_");
+
 /// see `Command.conflictOptions`
 /// Params:
 ///   Args = the options in the type of `OptVal`
-mixin template CONFLICT_OPTS(size_t id, Args...) {
+mixin template CONFLICT_OPTS(Args...) {
+    import std.meta;
+
     static foreach (f; Args)
         static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f)));
-    // alias CONFLICT_OPTS_ = Args;
-    mixin("alias CONFLICT_OPTS_" ~ id.stringof ~ "_ = Args;");
+    mixin("alias CONFLICT_OPTS_" ~ Filter!(__IS_CONFLICT_OPTS_NAME__, __traits(allMembers, __SELF__))
+            .length.stringof ~ "_ = Args;");
 }
 
 /// see `Command.needAnyOfOptions`
 /// Params:
 ///   Args = the options in the type of `OptVal
-mixin template NEED_ANYOF_OPTS(size_t id, Args...) {
+mixin template NEED_ANYOF_OPTS(Args...) {
+    import std.meta;
+
     static foreach (f; Args)
         static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f)));
-    // alias NEED_ANYOF_OPTS_ = Args;
-    mixin("alias NEED_ANYOF_OPTS_" ~ id.stringof ~ "_ = Args;");
+    mixin("alias NEED_ANYOF_OPTS_" ~ Filter!(__IS_NEED_ANYOF_OPTS_NAME__, __traits(allMembers, __SELF__))
+            .length.stringof ~ "_ = Args;");
 }
 
 /// see `Command.needOneOfOptions`
 /// Params:
 ///   Args = the options in the type of `OptVal
-mixin template NEED_ONEOF_OPTS(size_t id, Args...) {
+mixin template NEED_ONEOF_OPTS(Args...) {
+    import std.meta;
+
     static foreach (f; Args)
         static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f)));
-    // alias NEED_ONEOF_OPTS_ = Args;
-    mixin("alias NEED_ONEOF_OPTS_" ~ id.stringof ~ "_ = Args;");
+    mixin("alias NEED_ONEOF_OPTS_" ~ Filter!(__IS_NEED_ONEOF_OPTS_NAME__, __traits(allMembers, __SELF__))
+            .length.stringof ~ "_ = Args;");
 }
 
 /// see `Command.groupOptions`
 /// Params:
 ///   Args = the options in the type of `OptVal
-mixin template GROUP_OPTS(size_t id, Args...) {
+mixin template GROUP_OPTS(Args...) {
+    import std.meta;
+
     static foreach (f; Args)
         static assert(__CMDLINE_EXT_isInnerOptValField__!(typeof(f)));
-    // alias GROUP_OPTS_ = Args;
-    mixin("alias GROUP_OPTS_" ~ id.stringof ~ "_ = Args;");
+    mixin("alias GROUP_OPTS_" ~ Filter!(__IS_GROUP_OPTS_NAME__, __traits(allMembers, __SELF__))
+            .length.stringof ~ "_ = Args;");
 }
 
 /// prepare for the future use of function `ready` and `getParent`, which must be embedded at the top
@@ -654,8 +669,8 @@ mixin template END() {
         // debug pragma(msg, __OPT_E_FLAGS__);
         static foreach (idx, nm; __OPT_E_NAMES__) {
             mixin("static string[] EXPORT_" ~ nm ~ "_ = " ~ [
-                __OPT_E_FLAGS__[idx].args
-            ].stringof ~ ";");
+                    __OPT_E_FLAGS__[idx].args
+                ].stringof ~ ";");
         }
     }
 
@@ -665,8 +680,8 @@ mixin template END() {
         static foreach (idx, nm; __OPT_N_NAMES__) {
             mixin(
                 "static string[] EXPORT_N_" ~ nm ~ "_ = " ~ [
-                __OPT_N_FLAGS__[idx].args
-            ].stringof ~ ";");
+                    __OPT_N_FLAGS__[idx].args
+                ].stringof ~ ";");
         }
     }
 }
@@ -1358,9 +1373,9 @@ Command construct(T)() if (isOutputResult!T) {
                     enum dir = getMember!(T, __EXT_SUB_CMD_PREFIX_SEQ__[idx + 2]);
                     enum aliasName = __GET_SLICE__!(__EXT_SUB_CMD_PREFIX_SEQ__[idx + 3], len);
                     cmd.commandX(name._tokeytab, desc, [
-                        "file": bin,
-                        "dir": dir
-                    ]);
+                            "file": bin,
+                            "dir": dir
+                        ]);
                     static if (aliasName.length)
                         cmd.aliasName(aliasName._tokeytab);
                 }
@@ -1370,28 +1385,32 @@ Command construct(T)() if (isOutputResult!T) {
 
     import std.algorithm : map;
     import std.array : array;
+
     enum __to_stringof__(alias xxfxx) = xxfxx.stringof;
-    static foreach (id; 0 .. 10) {
-        static if (hasMember!(T, "CONFLICT_OPTS_" ~ id.stringof ~ "LU_")) {
-            cmd.conflictOptions([
-                staticMap!(__to_stringof__, getMember!(T, "CONFLICT_OPTS_" ~ id.stringof ~ "LU_"))
-            ].map!_tokeytab.array);
-        }
-        static if (hasMember!(T, "NEED_ANYOF_OPTS_" ~ id.stringof ~ "LU_")) {
-            cmd.needAnyOfOptions([
-                staticMap!(__to_stringof__, getMember!(T, "NEED_ANYOF_OPTS_" ~ id.stringof ~ "LU_"))
-            ].map!_tokeytab.array);
-        }
-        static if (hasMember!(T, "NEED_ONEOF_OPTS_" ~ id.stringof ~ "LU_")) {
-            cmd.needOneOfOptions([
-                staticMap!(__to_stringof__, getMember!(T, "NEED_ONEOF_OPTS_" ~ id.stringof ~ "LU_"))
-            ].map!_tokeytab.array);
-        }
-        static if (hasMember!(T, "GROUP_OPTS_" ~ id.stringof ~ "LU_")) {
-            cmd.groupOptions([
-                staticMap!(__to_stringof__, getMember!(T, "GROUP_OPTS_" ~ id.stringof ~ "LU_"))
-            ].map!_tokeytab.array);
-        }
+    enum __conflict_len__ = Filter!(__IS_CONFLICT_OPTS_NAME__, __traits(allMembers, T)).length;
+    enum __need_anyof_len__ = Filter!(__IS_NEED_ANYOF_OPTS_NAME__, __traits(allMembers, T)).length;
+    enum __need_oneof_len__ = Filter!(__IS_NEED_ONEOF_OPTS_NAME__, __traits(allMembers, T)).length;
+    enum __group_len__ = Filter!(__IS_GROUP_OPTS_NAME__, __traits(allMembers, T)).length;
+
+    static foreach (id; 0 .. __conflict_len__) {
+        cmd.conflictOptions([
+            staticMap!(__to_stringof__, getMember!(T, "CONFLICT_OPTS_" ~ id.stringof ~ "_"))
+        ].map!_tokeytab.array);
+    }
+    static foreach (id; 0 .. __need_anyof_len__) {
+        cmd.needAnyOfOptions([
+            staticMap!(__to_stringof__, getMember!(T, "NEED_ANYOF_OPTS_" ~ id.stringof ~ "_"))
+        ].map!_tokeytab.array);
+    }
+    static foreach (id; 0 .. __need_oneof_len__) {
+        cmd.needOneOfOptions([
+            staticMap!(__to_stringof__, getMember!(T, "NEED_ONEOF_OPTS_" ~ id.stringof ~ "_"))
+        ].map!_tokeytab.array);
+    }
+    static foreach (id; 0 .. __group_len__) {
+        cmd.groupOptions([
+            staticMap!(__to_stringof__, getMember!(T, "GROUP_OPTS_" ~ id.stringof ~ "_"))
+        ].map!_tokeytab.array);
     }
     return cmd;
 }
