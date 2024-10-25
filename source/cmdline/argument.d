@@ -191,8 +191,8 @@ public:
     Self defaultVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the argument `%s` inner type is not the type or related array type"(
-                    T.stringof, this._name));
+            error(format("the value type is `%s` while the argument `%s` inner type is not the type or related array type",
+                T.stringof, this._name));
         }
         return derived.defaultVal(value);
     }
@@ -206,8 +206,8 @@ public:
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
         if (!derived) {
-            error(format!"the value type is `%s` while the argument `%s` inner type is not the type or related array type"(
-                    T.stringof, this._name));
+            error(format("the value type is `%s` while the argument `%s` inner type is not the type or related array type",
+                T.stringof, this._name));
         }
         return derived.defaultVal(value, rest);
     }
@@ -219,7 +219,7 @@ public:
     /// Returns: `Self`` for chain call
     Self defaultVal(T)(in T[] values) if (isBaseArgValueType!T && !is(T == bool)) {
         if (values.length == 0) {
-            error(format!"the default value's num of argument `%s` cannot be zero"(this._name));
+            error(format("the default value's num of argument `%s` cannot be zero", this._name));
         }
         return defaultVal(values[0], cast(T[]) values[1 .. $]);
     }
@@ -228,9 +228,8 @@ package:
     Self configVal(T)(T value) if (isBaseArgValueType!T) {
         auto derived = cast(ValueArgument!T) this;
         if (!derived) {
-            parsingError(
-                format!"the value type is `%s` while argument the inner type is not the type or related array type in argument `%s`"(
-                    T.stringof, this._name));
+            parsingError(format("the value type is `%s` while argument the inner type is not the type or related array type in argument `%s`",
+                T.stringof, this._name));
         }
         return derived.configVal(value);
     }
@@ -239,16 +238,15 @@ package:
             if (isBaseArgValueType!T && !is(T == bool)) {
         auto derived = cast(ValueArgument!(T[])) this;
         if (!derived) {
-            parsingError(
-                format!"the value type is `%s` while argument the inner type is not the type or related array type in argument `%s`"(
-                    T.stringof, this._name));
+            parsingError(format("the value type is `%s` while argument the inner type is not the type or related array type in argument `%s`",
+                T.stringof, this._name));
         }
         return derived.configVal(value, rest);
     }
 
     Self configVal(T)(in T[] values) if (isBaseArgValueType!T && !is(T == bool)) {
         if (values.length == 0) {
-            error(format!"the default value's num of argument `%s` cannot be zero"(this._name));
+            error(format("the default value's num of argument `%s` cannot be zero", this._name));
         }
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
@@ -300,7 +298,7 @@ Argument createArgument(string flag, string desc = "") {
 Argument createArgument(T : bool)(string flag, string desc = "") {
     bool is_variadic = flag[$ - 2] == '.';
     if (is_variadic) {
-        error(format!"the flag `%s` cannot contain `...` in creating bool argument"(flag));
+        error(format("the flag `%s` cannot contain `...` in creating bool argument", flag));
     }
     return new ValueArgument!bool(flag, desc);
 }
@@ -331,7 +329,7 @@ Argument createArgument(T : U[], U)(string flag, string desc = "")
         if (!is(U == bool) && isBaseArgValueType!U) {
     bool is_variadic = flag[$ - 2] == '.';
     if (!is_variadic) {
-        error(format!"the flag `%s` must contain `...` in creating variadic option"(flag));
+        error(format("the flag `%s` must contain `...` in creating variadic option", flag));
     }
     return new ValueArgument!T(flag, desc);
 }
@@ -422,17 +420,15 @@ package class ValueArgument(T) : Argument {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal in argument `%s`, the values is: `%s`"(
-                            this._name,
-                            values.to!string));
+                    error(format("the element value of choices can not be equal in argument `%s`, the values is: `%s`",
+                        this._name, values.to!string));
                 }
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s in argument `%s`, the values is: `%s`"(
-                        this.rangeOfStr(), this._name, values.to!string
-                ));
+                error(format("the element value of choices cannot be out of %s in argument `%s`, the values is: `%s`",
+                    this.rangeOfStr(), this._name, values.to!string));
             }
         }
         this.argChoices = values;
@@ -443,17 +439,15 @@ package class ValueArgument(T) : Argument {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal in argument `%s`, the values is: `%s`"(
-                            this._name,
-                            values.to!string));
+                    error(format("the element value of choices can not be equal in argument `%s`, the values is: `%s`",
+                        this._name, values.to!string));
                 }
             }
         }
         static if (is(T == int[]) || is(T == double[])) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s in argument `%s`, the values is: `%s`"(
-                        this.rangeOfStr(), this._name, values.to!string
-                ));
+                error(format("the element value of choices cannot be out of %s in argument `%s`, the values is: `%s`",
+                    this.rangeOfStr(), this._name, values.to!string));
             }
         }
         this.argChoices = values;
@@ -463,20 +457,14 @@ package class ValueArgument(T) : Argument {
     void _checkVal(U)(in U value) const if (isBaseArgValueType!T && is(U == T)) {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s for argument `%s`, the value is: `%s`"(
-                        this.choicesStr(),
-                        this._name,
-                        value.to!string
-                ));
+                parsingError(format("the value cannot be out of %s for argument `%s`, the value is: `%s`",
+                    this.choicesStr(), this._name, value.to!string));
             }
         }
         static if (is(T == int) || is(T == double)) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s for argument `%s`, the value is: `%s`"(
-                        this.rangeOfStr(),
-                        this._name,
-                        value.to!string
-                ));
+                parsingError(format("the value cannot be out of %s for argument `%s`, the value is: `%s`",
+                    this.rangeOfStr(), this._name, value.to!string));
             }
         }
     }
@@ -485,20 +473,14 @@ package class ValueArgument(T) : Argument {
     if (is(U == ElementType!T) && !is(T == string)) {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s for argument `%s`, the value is: `%s`"(
-                        this.choicesStr(),
-                        this._name,
-                        value.to!string
-                ));
+                parsingError(format("the value cannot be out of %s for argument `%s`, the value is: `%s`",
+                    this.choicesStr(), this._name, value.to!string));
             }
         }
         static if (is(T == int[]) || is(T == double[])) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s for argument `%s`, the value is: `%s`"(
-                        this.rangeOfStr(),
-                        this._name,
-                        value.to!string
-                ));
+                parsingError(format("the value cannot be out of %s for argument `%s`, the value is: `%s`",
+                    this.rangeOfStr(), this._name, value.to!string));
             }
         }
     }
@@ -586,11 +568,8 @@ package class ValueArgument(T) : Argument {
                 this.cliArg = tmp;
             }
             catch (ConvException e) {
-                parsingError(format!"on argument `%s` cannot convert the input `%s` to type `%s`"(
-                        this._name,
-                        value,
-                        T.stringof
-                ));
+                parsingError(format("on argument `%s` cannot convert the input `%s` to type `%s`",
+                        this._name, value, T.stringof));
             }
         }
         else {
@@ -600,11 +579,8 @@ package class ValueArgument(T) : Argument {
                 this.cliArg = tmp;
             }
             catch (ConvException e) {
-                parsingError(format!"on argument `%s` cannot convert the input `%s` to type `%s`"(
-                        this._name,
-                        ([value] ~ rest).to!string,
-                        T.stringof
-                ));
+                parsingError(format("on argument `%s` cannot convert the input `%s` to type `%s`",
+                        this._name, ([value] ~ rest).to!string, T.stringof));
             }
         }
         return this;
@@ -617,7 +593,7 @@ package class ValueArgument(T) : Argument {
 
     override Self initialize() {
         if (!this.isValid) {
-            parsingError(format!"the argument `%s` must valid before initializing"(this._name));
+            parsingError(format("the argument `%s` must valid before initializing", this._name));
         }
         this.settled = true;
         if (!cliArg.isNull) {

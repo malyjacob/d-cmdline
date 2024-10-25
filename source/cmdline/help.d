@@ -391,7 +391,7 @@ package:
         }
 
         if (!cmd._defaultCommandName.empty) {
-            string str = format!"default sub command is `%s`"(cmd._defaultCommandName);
+            string str = format("default sub command is `%s`", cmd._defaultCommandName);
             output ~= [this.wrap(str, this.helpWidth, 0), ""];
         }
 

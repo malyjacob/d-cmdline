@@ -218,20 +218,21 @@ public:
         foreach (string key; tmp) {
             if (variadic.length)
                 this.error(
-                    format!"not allowed to register option `%s` after variadic option `%s` which is also registered as argument"(
+                    format("not allowed to register option `%s` after variadic option `%s` which is also registered as argument",
                         key, variadic
                 ));
             auto opt = _findOption(key);
             if (!opt) {
                 this.error(
-                    format!"connot register option `%s` as argument for it doesn't exist"(key));
+                    format("connot register option `%s` as argument for it doesn't exist", key));
             }
             if (opt.variadic)
                 variadic = opt.flags;
         }
         if (this._arguments.length && this._arguments[$ - 1].variadic) {
             this.error(
-                format!"connot register options `%s` as arguments for the last registred argument `%s` is variadic"(
+                format(
+                    "connot register options `%s` as arguments for the last registred argument `%s` is variadic",
                     tmp.to!string,
                     this._arguments[$ - 1]._name
             )
@@ -307,7 +308,7 @@ public:
         }
         if (!this._externalCmdHelpFlagMap || !(cmd._name in this._externalCmdHelpFlagMap))
             this._externalCmdHelpFlagMap[cmd._name] = "--help";
-        cmd.usage(format!"run `%s %s %s` to see"(this._name, cmd._name, this
+        cmd.usage(format("run `%s %s %s` to see", this._name, cmd._name, this
                 ._externalCmdHelpFlagMap[cmd._name]));
         cmd.parent = this;
         cmd._allowExcessArguments = true;
@@ -373,7 +374,7 @@ package:
     void _registerArgument(Argument arg) {
         auto other = _findArgument(arg._name);
         if (other) {
-            this.error(format!"cannot add argument `%s` as this name already used "(
+            this.error(format("cannot add argument `%s` as this name already used ",
                     arg._name));
         }
         this._arguments ~= arg;
@@ -385,7 +386,7 @@ package:
         if (!alreadyUsed.empty) {
             string exit_cmd = knownBy(this._findCommand(alreadyUsed[0])).join("|");
             string new_cmd = knownBy(command).join("|");
-            this.error(format!"cannot add command `%s` as already have command `%s`"(new_cmd, exit_cmd));
+            this.error(format("cannot add command `%s` as already have command `%s`", new_cmd, exit_cmd));
         }
         if (auto help_cmd = this._helpCommand) {
             auto num = knownBy(command).count!(name => name == help_cmd._name ||
@@ -433,42 +434,42 @@ package:
         if (match_lopt) {
             string match_flags = match_lopt is match_sopt ? match_lopt.flags : match_lopt.longFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_lopt.flags
             ));
         }
         if (match_sopt && match_sopt !is match_lopt) {
             auto match_flags = option.shortFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_sopt.flags
             ));
         }
         if (match_nopt) {
             string match_flags = match_nopt.shortFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_nopt.flags
             ));
         }
         if (auto help_option = this._helpOption) {
             if (option.matchFlag(help_option)) {
-                this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(
+                this.error(format("Cannot add option '%s' due to confliction help option `%s`",
                         option.flags, help_option.flags));
             }
         }
         else if (this._addImplicitHelpOption && (option.shortFlag == "-h" || option.longFlag == "--help")) {
-            this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(option.flags, "-h, --help"));
+            this.error(format("Cannot add option '%s' due to confliction help option `%s`", option.flags, "-h, --help"));
         }
         if (auto version_option = this._versionOption) {
             if (option.matchFlag(version_option)) {
-                this.error(format!"Cannot add option '%s' due to confliction version option `%s`"(
+                this.error(format("Cannot add option '%s' due to confliction version option `%s`",
                         option.flags, version_option.flags));
             }
         }
         if (auto config_option = this._configOption) {
             if (option.matchFlag(config_option)) {
-                this.error(format!"Cannot add option '%s' due to confliction config option `%s`"(
+                this.error(format("Cannot add option '%s' due to confliction config option `%s`",
                         option.flags, config_option.flags));
             }
         }
@@ -482,41 +483,41 @@ package:
         if (match_lopt) {
             string match_flags = match_lopt is match_sopt ? match_lopt.flags : match_lopt.longFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_lopt.flags
             ));
         }
         if (match_sopt && match_sopt !is match_lopt) {
             auto match_flags = option.shortFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_sopt.flags
             ));
         }
         if (match_opt) {
             auto match_flags = match_opt.shortFlag;
             this.error(
-                format!"Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'"(
+                format("Cannot add option '%s' due to conflicting flag '%s' - already ued by option '%s'",
                     option.flags, match_flags, match_opt.flags
             ));
         }
         if (auto help_option = this._helpOption) {
             if (option.matchFlag(help_option))
-                this.error(format!"Cannot add negate-option '%s' due to confliction help option `%s`"(
+                this.error(format("Cannot add negate-option '%s' due to confliction help option `%s`",
                         option.flags, help_option.flags));
         }
         else if (this._addImplicitHelpOption && (option.shortFlag == "-h" || option.longFlag == "--no-help")) {
-            this.error(format!"Cannot add negate-option '%s' due to confliction help option `%s`"(
+            this.error(format("Cannot add negate-option '%s' due to confliction help option `%s`",
                     option.flags, "-h, --help"));
         }
         if (auto version_option = this._versionOption) {
             if (option.matchFlag(version_option))
-                this.error(format!"Cannot add negate-option '%s' due to confliction version option `%s`"(
+                this.error(format("Cannot add negate-option '%s' due to confliction version option `%s`",
                         option.flags, version_option.flags));
         }
         if (auto config_option = this._configOption) {
             if (option.matchFlag(config_option)) {
-                this.error(format!"Cannot add negate-option '%s' due to confliction config option `%s`"(
+                this.error(format("Cannot add negate-option '%s' due to confliction config option `%s`",
                         option.flags, config_option.flags));
             }
         }
@@ -538,7 +539,7 @@ public:
                 this.on("option:" ~ name, (string[] vals) {
                     if (vals.length == 0) {
                         this.parsingError(
-                            format!"the value's num of variadic option `%s` cannot be zero"(name));
+                            format("the value's num of variadic option `%s` cannot be zero", name));
                     }
                     setOptionVal!(Source.Cli)(name, vals);
                 });
@@ -830,18 +831,18 @@ public:
         auto tmp = [name] ~ rest;
         foreach (string n; tmp) {
             if (n.length == 0 || n[1] == '-') {
-                error(format!"the option name `\"%s\"` is not in legacy in `Command.provides`"(n));
+                error(format("the option name `\"%s\"` is not in legacy in `Command.provides`", n));
             }
         }
         if (tmp.any!(str => this._findOption(str) is null)) {
-            this.error(format!"the non-builtin option names `%s` you provide doesn't all exist in `Command.provides`"(
+            this.error(format("the non-builtin option names `%s` you provide doesn't all exist in `Command.provides`",
                     tmp.to!string
             ));
         }
         this._provide_arr.each!((str) {
             if (str.canFind(':') && name.length < str.length
             && (name == str[$ - name.length .. $] || name == str[0 .. name.length]))
-                error(format!"the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.provides`"(
+                error(format("the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.provides`",
                     name, str
                 ));
         });
@@ -858,40 +859,40 @@ public:
     /// Returns: `Self` for chain call
     Self providesAs(in string name, in string asName) {
         if (name.length == 0 || name[1] == '-') {
-            error(format!"the option name `\"%s\"` is not in legacy in `Command.providesAs`"(name));
+            error(format("the option name `\"%s\"` is not in legacy in `Command.providesAs`", name));
         }
         if (asName.length == 0 || asName[1] == '-') {
-            error(format!"the option as-name `\"%s\"` is not in legacy in `Command.providesAs`"(
+            error(format("the option as-name `\"%s\"` is not in legacy in `Command.providesAs`",
                     asName));
         }
         if (this._findOption(name) is null) {
             this.error(
-                format!"the non-builtin option name `%s` you provide doesn't exist in `Command.providesAs`"(
+                format("the non-builtin option name `%s` you provide doesn't exist in `Command.providesAs`",
                     name));
         }
         if (this._findOption(asName) !is null) {
             this.error(
-                format!"the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.providesAs`"(
+                format("the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.providesAs`",
                     asName, name
             ));
         }
         if (this._provide_arr.count(name) > 0) {
-            error(format!"the option name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`"(
+            error(format("the option name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`",
                     name));
         }
         if (this._provide_arr.count(asName) > 0) {
-            error(format!"the option as-name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`"(
+            error(format("the option as-name `%s` has been registered to be exposed, you cannot register it again in `Command.providesAs`",
                     asName));
         }
         this._provide_arr.each!((str) {
             if (str.canFind(':') && asName.length < str.length && asName == str[0 .. asName.length])
-                error(format!"the option as-name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`"(
+                error(format("the option as-name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`",
                     asName, str
                 ));
         });
         this._provide_arr.each!((str) {
             if (str.canFind(':') && name.length < str.length && name == str[$ - name.length .. $])
-                error(format!"the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`"(
+                error(format("the option name `%s` has been registered to be exposed as `%s`, you cannot register it again in `Command.providesAs`",
                     name, str
                 ));
         });
@@ -921,12 +922,12 @@ public:
         auto tmp = ([name] ~ rest).uniq.array;
         foreach (string n; tmp) {
             if (n.length == 0 || n[1] == '-') {
-                error(format!"the option name `\"%s\"` is not in legacy in `Command.injects`"(n));
+                error(format("the option name `\"%s\"` is not in legacy in `Command.injects`", n));
             }
         }
         foreach (str; tmp) {
             if (_findOption(str) !is null)
-                error(format!"connot inject option `%s` for this option has been exist in its option list using `Command.injects`"(
+                error(format("connot inject option `%s` for this option has been exist in its option list using `Command.injects`",
                         str));
         }
         Command[] ancestors = this._getCommandAndAncestors()[1 .. $];
@@ -938,7 +939,7 @@ public:
             this._inject_arr.each!((istr) {
                 if (istr.canFind(':') && str.length < istr.length
                 && (str == istr[$ - str.length .. $] || str == istr[0 .. str.length])) {
-                    error(format!"the option name `%s` has been injected as `%s`, you cannot register it again in `Command.injects`"(
+                    error(format("the option name `%s` has been injected as `%s`, you cannot register it again in `Command.injects`",
                         str, istr
                     ));
                 }
@@ -957,7 +958,7 @@ public:
                 }
             }
             if (str == get_front())
-                error(format!"cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injects`"(
+                error(format("cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injects`",
                         str));
         }
         this._inject_arr = this._inject_arr.uniq.array;
@@ -973,33 +974,33 @@ public:
     /// Returns: `Self` for chain call
     Self injectsAs(in string name, in string asName) {
         if (name.length == 0 || name[1] == '-') {
-            error(format!"the option name `\"%s\"` is not in legacy in `Command.injectsAs`"(name));
+            error(format("the option name `\"%s\"` is not in legacy in `Command.injectsAs`", name));
         }
         if (asName.length == 0 || asName[1] == '-') {
-            error(format!"the option asName `\"%s\"` is not in legacy in `Command.injectsAs`"(
+            error(format("the option asName `\"%s\"` is not in legacy in `Command.injectsAs`",
                     asName));
         }
         if (this._findOption(asName) !is null) {
             this.error(
-                format!"the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.injectsAs`"(
+                format("the as-name `%s` has been an option's name, you cannot make it as the name of option `%s` in `Command.injectsAs`",
                     asName, name
             ));
         }
         if (this._inject_arr.count(name) > 0)
-            error(format!"the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`"(
+            error(format("the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`",
                     name));
         if (this._inject_arr.count(asName) > 0)
-            error(format!"the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`"(
+            error(format("the option name `%s` has been injected, you cannot inject it again in `Command.injectsAs`",
                     asName));
         this._inject_arr.each!((str) {
             if (str.canFind(':') && asName.length < str.length && asName == str[0 .. asName.length])
-                error(format!"the option as-name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`"(
+                error(format("the option as-name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`",
                     asName, str
                 ));
         });
         this._inject_arr.each!((str) {
             if (str.canFind(':') && name.length < str.length && name == str[0 .. name.length])
-                error(format!"the option name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`"(
+                error(format("the option name `%s` has been injected as `%s`, you cannot injected it again in `Command.providesAs`",
                     name, str
                 ));
         });
@@ -1019,7 +1020,7 @@ public:
             }
         }
         if (!flag)
-            error(format!"cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injectsAs`"(
+            error(format("cannnot inject the name `%s` for there is not any option match option name the ancestors provided using `Command.injectsAs`",
                     name));
         this._inject_arr ~= asName ~ ':' ~ name;
         return this;
@@ -1041,7 +1042,7 @@ package:
     Self setOptionVal(Source src, T)(string key, T value) if (isOptionValueType!T) {
         Option opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         switch (src) {
         case Source.Default:
@@ -1066,7 +1067,7 @@ package:
     Self setOptionVal(Source src)(string key) {
         auto opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         switch (src) {
         case Source.Default:
@@ -1091,7 +1092,7 @@ package:
     Self setOptionVal(Source src : Source.Env)(string key) {
         auto opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         opt.envVal();
         return this;
@@ -1101,7 +1102,7 @@ package:
         string)(string key, T value, T[] rest...) {
         auto opt = this._findOptionFromAll(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         opt.cliVal(value, rest);
         opt.settled = false;
@@ -1117,7 +1118,7 @@ package:
         string)(string key, T[] values) {
         if (values.length == 0) {
             this.parsingError(
-                format!"the value's num of option `%s` cannot be zero"(key));
+                format("the value's num of option `%s` cannot be zero", key));
         }
         return this.setOptionVal!src(key, values[0], values[1 .. $]);
     }
@@ -1126,12 +1127,12 @@ package:
             if (isOptionValueType!T) {
         auto opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         static if (!is(ElementType!T U == void) && !is(T == string)) {
             VariadicOption!U derived = cast(VariadicOption!U) opt;
             if (!derived) {
-                error(format!"connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`"(
+                error(format("connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`",
                         value.to!string,
                         opt.flags
                 ));
@@ -1144,7 +1145,7 @@ package:
         else {
             ValueOption!T derived = cast(ValueOption!T) opt;
             if (!derived) {
-                error(format!"connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`"(
+                error(format("connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`",
                         value.to!string,
                         opt.flags
                 ));
@@ -1161,15 +1162,15 @@ package:
             if (isOptionValueType!T) {
         auto opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         if (!opt.isOptional) {
-            this.parsingError(format!"option `%s` must be optional"(key));
+            this.parsingError(format("option `%s` must be optional", key));
         }
         static if (!is(ElementType!T U == void) && !is(T == string)) {
             VariadicOption!U derived = cast(VariadicOption!U) opt;
             if (!derived) {
-                error(format!"connot set value `true` in option `%s` directly using `Command.setOptionValDirectly`"(
+                error(format("connot set value `true` in option `%s` directly using `Command.setOptionValDirectly`",
                         opt.flags
                 ));
             }
@@ -1181,7 +1182,7 @@ package:
         else {
             ValueOption!T derived = cast(ValueOption!T) opt;
             if (!derived) {
-                error(format!"connot set value `true` in option `%s` directly using `Command.setOptionValDirectly`"(
+                error(format("connot set value `true` in option `%s` directly using `Command.setOptionValDirectly`",
                         opt.flags
                 ));
             }
@@ -1196,11 +1197,11 @@ package:
     Self setOptionValDirectly(string key, bool value = true, Source src = Source.None) {
         auto opt = this._findOption(key);
         if (!opt) {
-            this.parsingError(format!"option `%s` doesn't exist"(key));
+            this.parsingError(format("option `%s` doesn't exist", key));
         }
         BoolOption derived = cast(BoolOption) opt;
         if (!derived) {
-            error(format!"connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`"(
+            error(format("connot set value `%s` in option `%s` directly using `Command.setOptionValDirectly`",
                     value.to!string,
                     opt.flags
             ));
@@ -1233,7 +1234,7 @@ public:
     T getOptVal(T)(string key) const {
         auto opt = this.findOption(key);
         if (!opt) {
-            this.error(format!"connot find option `%s` when try to get its value of type `%s`"(
+            this.error(format("connot find option `%s` when try to get its value of type `%s`",
                     opt.flags,
                     T.stringof
             ));
@@ -1248,11 +1249,11 @@ public:
     //             return ArgWrap(this.opts[key]);
     //         auto opt = this._findOption(key);
     //         if (!opt) {
-    //             this.error(format!"option `%s` doesn't exist"(key));
+    //             this.error(format("option `%s` doesn't exist",key));
     //         }
     //         return ArgWrap(opt.get);
     //     }
-    //     this.error(format!"cannot get the option `%s`'s value"(key));
+    //     this.error(format("cannot get the option `%s`'s value",key));
     //     assert(0);
     // }
 
@@ -1264,7 +1265,7 @@ public:
     Source getOptionValSource(string key) const {
         auto opt = this._findOption(key);
         if (!opt || !opt.settled) {
-            this.error(format!"option `%s` doesn't exist or not settled"(key));
+            this.error(format("option `%s` doesn't exist or not settled", key));
         }
         return opt.source;
     }
@@ -1274,11 +1275,11 @@ public:
     //     foreach (cmd; cmds) {
     //         auto opt = this._findOption(key);
     //         if (!opt) {
-    //             this.error(format!"option `%s` doesn't exist"(key));
+    //             this.error(format("option `%s` doesn't exist",key));
     //         }
     //         return opt.source;
     //     }
-    //     this.error(format!"cannot get the option `%s`'s source"(key));
+    //     this.error(format("cannot get the option `%s`'s source",key));
     //     assert(0);
     // }
 
@@ -1568,7 +1569,7 @@ package:
                 _args.insertInPlace(0, "-" ~ arg[2 .. $]);
             }
             else {
-                cmd.parsingError(format!"invalid value: `%s` for bool option `%s`"(
+                cmd.parsingError(format("invalid value: `%s` for bool option `%s`",
                         arg[2 .. $],
                         opt.flags
                 ));
@@ -1656,7 +1657,7 @@ package:
                 _args.insertInPlace(0, "-" ~ arg[2 .. $]);
             }
             else {
-                cmd.parsingError(format!"invalid value: `%s` for negate option `%s`"(
+                cmd.parsingError(format("invalid value: `%s` for negate option `%s`",
                         arg[2 .. $],
                         nopt.flags
                 ));
@@ -1956,8 +1957,8 @@ package:
     void _checkMissingMandatoryOption() const {
         auto f = this._options.filter!(opt => opt.mandatory && !opt.settled);
         if (!f.empty) {
-            auto strs = f.map!(opt => format!"`%s`"(opt.name)).join(" and ");
-            this.parsingError(format!"the option: %s must have a valid value!"(strs));
+            auto strs = f.map!(opt => format("`%s`", opt.name)).join(" and ");
+            this.parsingError(format("the option: %s must have a valid value!", strs));
         }
     }
 
@@ -1970,7 +1971,8 @@ package:
             foreach (name; confilcts) {
                 opts.each!((o) {
                     if (opt !is o && o.name == name)
-                        parsingError(format!"the values of the option `%s` and `%s` cannot both be valid"(name, opt.name));
+                        parsingError(format("the values of the option `%s` and `%s` cannot both be valid", name, opt
+                            .name));
                 });
             }
         };
@@ -1984,13 +1986,13 @@ package:
         auto flg = this._anyOptsNeeded.any!(n => opts.canFind!(opt => opt.name == n));
         if (this._anyOptsNeeded.length && !flg)
             parsingError(format("at least one of the options whose name appear on `%s` must be valid",
-                        this._anyOptsNeeded.to!string));
+                    this._anyOptsNeeded.to!string));
         foreach (opt; opts) {
             const string[] needs = opt.needWith;
             foreach (string need; needs) {
-                if(!opts.canFind!(o => opt !is o && o.name == need)) {
+                if (!opts.canFind!(o => opt !is o && o.name == need)) {
                     parsingError(format("the value of option `%s` must be valid, when the value of `%s` is settled!",
-                        need, opt.name));
+                            need, opt.name));
                 }
             }
             const string[] need_anyofs = opt.needAnyOfWith;
@@ -2052,7 +2054,7 @@ package:
                                 this.setOptionValDirectly(opt.name, value, Source.Cli);
                             }
                             catch (ConvException e) {
-                                parsingError(format!"on bool option `%s` cannot convert the input `%s` to type `%s`"(
+                                parsingError(format("on bool option `%s` cannot convert the input `%s` to type `%s`",
                                         opt.flags, args[index], bool.stringof
                                 ));
                             }
@@ -2070,7 +2072,7 @@ package:
         this._arguments.each!((Argument arg) {
             if (arg.isRequired && !arg.isValid)
                 this.parsingError(
-                    format!"argument `%s` is required but its value is invalid"(arg._name));
+                    format("argument `%s` is required but its value is invalid", arg._name));
         });
         this._arguments.each!((Argument arg) {
             if (arg.isValid || arg.settled)
@@ -2080,7 +2082,8 @@ package:
         foreach (i, arg; this._arguments) {
             if (prev && arg.settled && !prev.settled)
                 this.parsingError(
-                    format!"arg should be valid in row, the prev arg `%s` is invalid, while cur arg `%s` is valid"(
+                    format(
+                        "arg should be valid in row, the prev arg `%s` is invalid, while cur arg `%s` is valid",
                         prev._name, arg._name
                 ));
             prev = arg;
@@ -2215,15 +2218,15 @@ public:
         auto vopt = createOption(flags, desc);
         if (auto help_opt = this._helpOption) {
             if (vopt.matchFlag(help_opt))
-                this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(vopt.flags, help_opt
+                this.error(format("Cannot add option '%s' due to confliction help option `%s`", vopt.flags, help_opt
                         .flags));
         }
         else if (this._addImplicitHelpOption && (vopt.shortFlag == "-h" || vopt.longFlag == "--help")) {
-            this.error(format!"Cannot add option '%s' due to confliction help option `%s`"(vopt.flags, "-h, --help"));
+            this.error(format("Cannot add option '%s' due to confliction help option `%s`", vopt.flags, "-h, --help"));
         }
         if (auto config_opt = this._configOption) {
             if (vopt.matchFlag(config_opt))
-                this.error(format!"Cannot add option '%s' due to confliction config option `%s`"(vopt.flags, config_opt
+                this.error(format("Cannot add option '%s' due to confliction config option `%s`", vopt.flags, config_opt
                         .flags));
         }
         this._versionOption = vopt;
@@ -2277,7 +2280,8 @@ public:
             if (!none) {
                 string help_cmd_names = help_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
+                    format(
+                        "cannot add command `%s` as this command name cannot be same as the name of help command `%s`",
                         vname, help_cmd_names));
             }
         }
@@ -2285,7 +2289,8 @@ public:
             string help_cmd_names = "help";
             if (vname == help_cmd_names) {
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
+                    format(
+                        "cannot add command `%s` as this command name cannot be same as the name of help command `%s`",
                         vname, help_cmd_names));
             }
         }
@@ -2318,14 +2323,16 @@ public:
             if (!none) {
                 string help_cmd_names = help_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
+                    format(
+                        "cannot add command `%s` as this command name cannot be same as the name of help command `%s`",
                         vname, help_cmd_names));
             }
         }
         else if (this._addImplicitHelpCommand) {
             string help_cmd_names = "help";
             if (vname == help_cmd_names) {
-                this.error(format!"cannot add command `%s` as this command name cannot be same as the name of help command `%s`"(
+                this.error(format(
+                        "cannot add command `%s` as this command name cannot be same as the name of help command `%s`",
                         vname, help_cmd_names));
             }
         }
@@ -2351,7 +2358,7 @@ public:
             format("define the directories of the config file," ~
                     "if not specified, the config file name would be" ~
                     " `%s.config.json` and it is on the dir `%s` and current woker dir `%s`",
-                    this._name, defaultDir, cwd) : desc;
+                this._name, defaultDir, cwd) : desc;
         this._configPaths ~= defaultDir;
         this._configPaths ~= cwd;
         this._configPaths = this._configPaths.uniq.array;
@@ -2361,13 +2368,11 @@ public:
                 copt.matchFlag(
                     help_opt))
                 this.error(
-                    format!"Cannot add option '%s'
-                    due to confliction help option `%s`"(copt.flags, help_opt.flags));
+                    format("Cannot add option '%s' due to confliction help option `%s`", copt.flags, help_opt.flags));
         }
         else if (this._addImplicitHelpOption && (copt.shortFlag == "-h" || copt.longFlag == "--help")) {
             this.error(
-                format!"Cannot add option '%s'
-                    due to confliction help option `%s`"(copt.flags, "-h, --help"));
+                format("Cannot add option '%s' due to confliction help option `%s`", copt.flags, "-h, --help"));
         }
         if (
             auto version_opt = this
@@ -2376,8 +2381,7 @@ public:
                 copt.matchFlag(
                     version_opt))
                 this.error(
-                    format!"Cannot add option '%s'
-                    due to confliction version option `%s`"(copt.flags, version_opt.flags));
+                    format("Cannot add option '%s' due to confliction version option `%s`", copt.flags, version_opt.flags));
         }
         this._configOption = copt;
         string cname = copt.name;
@@ -2388,7 +2392,7 @@ public:
                 auto rpath = buildPath(current_dir, path);
                 auto npath = exists(rpath) ? rpath : path;
                 if (!exists(npath)) {
-                    parsingError(format!"invalid path `%s` or `%s`"(rpath, path));
+                    parsingError(format("invalid path `%s` or `%s`", rpath, path));
                 }
                 this._configPaths ~= npath;
             });
@@ -2566,7 +2570,7 @@ public:
                     auto rele = new JSONValue(parseJSON(raw));
                     if (rele.type != JSONType.OBJECT) {
                         parsingError(
-                            format!"the json must be object in json file `%s`"(config_file));
+                            format("the json must be object in json file `%s`", config_file));
                     }
                     tmp ~= rele;
                 }
@@ -2613,8 +2617,7 @@ public:
             if (!none) {
                 string version_cmd_names = version_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of version command `%s`"(
+                    format("cannot add command `%s` as this command name cannot be same as the name of version command `%s`",
                         hname, version_cmd_names));
             }
         }
@@ -2642,8 +2645,7 @@ public:
             if (!none) {
                 string version_cmd_names = version_cmd_name_arr.join("|");
                 this.error(
-                    format!"cannot add command `%s` as this command name cannot be same as
-                        the name of version command `%s`"(
+                    format("cannot add command `%s` as this command name cannot be same as the name of version command `%s`",
                         hnames.join("|"), version_cmd_names));
             }
         }
@@ -2675,14 +2677,12 @@ public:
         if (auto config_opt = this._configOption) {
             if (hopt.matchFlag(config_opt))
                 this.error(
-                    format!"Cannot add option '%s'
-                    due to confliction config option `%s`"(hopt.flags, config_opt.flags));
+                    format("Cannot add option '%s' due to confliction config option `%s`", hopt.flags, config_opt.flags));
         }
         if (auto version_opt = this._versionOption) {
             if (hopt.matchFlag(version_opt))
                 this.error(
-                    format!"Cannot add option '%s'
-                    due to confliction version option `%s`"(hopt.flags, version_opt.flags));
+                    format("Cannot add option '%s' due to confliction version option `%s`", hopt.flags, version_opt.flags));
         }
         this._helpOption = hopt;
         this.on("option:" ~ hopt.name, () { this.help(); });
@@ -2828,14 +2828,14 @@ public:
                 else {
                     this.opts = this.opts is null ?
                         this._options
-                        .filter!(opt => opt.settled)
-                        .map!(opt => tuple(opt.name, opt.get))
-                        .assocArray : this.opts;
+                            .filter!(opt => opt.settled)
+                            .map!(opt => tuple(opt.name, opt.get))
+                            .assocArray : this.opts;
                     this.args = this.args.empty ?
                         this._arguments
-                        .filter!(arg => arg.settled)
-                        .map!(arg => arg.get)
-                        .array : this.args;
+                            .filter!(arg => arg.settled)
+                            .map!(arg => arg.get)
+                            .array : this.args;
                     OptsWrap wopts = OptsWrap(this.opts);
                     static if (len == 1) {
                         fn(wopts);
@@ -2910,7 +2910,7 @@ public:
             command = this._commands[$ - 1];
         }
         if (aliasStr == command._name)
-            this.error(format!"cannot add alias `%s` to command `%s` as they cannot be same"(
+            this.error(format("cannot add alias `%s` to command `%s` as they cannot be same",
                     aliasStr, command
                     ._name
             ));
@@ -2920,7 +2920,7 @@ public:
             exitCmdNames ~= matchingCommand.aliasNames;
             auto namesStr = exitCmdNames.join("|");
             this.error(
-                format!"cannot add alias %s to command %s as already have command %s"(
+                format("cannot add alias %s to command %s as already have command %s",
                     aliasStr, this.name, namesStr));
         }
         command._aliasNames ~= aliasStr;
@@ -3015,13 +3015,13 @@ public:
         auto args = this._arguments;
         Argument prev_arg = args.length ? args[$ - 1] : null;
         if (prev_arg && prev_arg.variadic) {
-            this.error(format!"cannot add argument `%s` after the variadic argument `%s`"(
+            this.error(format("cannot add argument `%s` after the variadic argument `%s`",
                     argument._name, prev_arg
                     ._name
             ));
         }
         if (prev_arg && prev_arg.isOptional && argument.isRequired) {
-            this.error(format!"cannot add required argument `%s` after the optional argument `%s`"(
+            this.error(format("cannot add required argument `%s` after the optional argument `%s`",
                     argument._name, prev_arg
                     ._name
             ));
@@ -3303,11 +3303,11 @@ public:
             return "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-                        ]) ~
+            ]) ~
                     (_commands.length ? "[command]" : [
-                        ]) ~
+            ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-                        ])
+            ])
             ).join(" ");
         }
         return this._usage;
@@ -3335,11 +3335,11 @@ public:
             command._usage = "" ~ (
                 seed ~
                     (_options.length || _addImplicitHelpOption ? "[options]" : [
-                        ]) ~
+            ]) ~
                     (_commands.length ? "[command]" : [
-                        ]) ~
+            ]) ~
                     (_arguments.length || this._argToOptNames.length ? args_str : [
-                        ])
+            ])
             ).join(" ");
         }
         else
@@ -3367,14 +3367,14 @@ unittest {
     cmd.description("this is test");
     assert("description: this is test" == cmd.description);
     cmd.description("this is test", [
-            "first": "1st",
-            "second": "2nd"
-        ]);
+        "first": "1st",
+        "second": "2nd"
+    ]);
     assert(
         cmd._argsDescription == [
-            "first": "1st",
-            "second": "2nd"
-        ]);
+        "first": "1st",
+        "second": "2nd"
+    ]);
     cmd.setVersion("0.0.1");
     // cmd.emit("command:version");
     // cmd.emit("option:version");
