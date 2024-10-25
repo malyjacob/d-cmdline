@@ -18,6 +18,7 @@ Try:
 version (CMDLINE_CLASSIC) {
     void main(in string[] argv) {
         program
+            .allowExcessArguments(false)
             .addHelpText(AddHelpPos.Before, TXT)
             .description("calculate data from various planar graphs")
             .setVersion("0.0.1");
@@ -69,12 +70,12 @@ version (CMDLINE_CLASSIC) {
             .needs("circle");
 
         precision_opt = createOption!int("--precision -p <dig>", "set the precision")
-            .rangeOf(1, 6)
+            .rangeOf(0, 12)
             .defaultVal(6);
 
         span_opt = createOption!int("--span -s <len>", "set the span")
-            .rangeOf(1, 6)
-            .defaultVal(6);
+            .rangeOf(1, 12)
+            .defaultVal(1);
         
         program.addOptions(target_opt, area_opt, perim_opt, graph_opt, data_opt,
             rect_opt, tr_opt, circle_opt, height_opt, width_opt,
@@ -150,6 +151,7 @@ else {
         mixin DESC!"calculate data from various planar graphs";
 
         mixin HELP_TEXT_BEFORE!TXT;
+        mixin DISALLOW_EXCESS_ARGS;
 
         mixin DEF_OPT!(
             "target", string, "-t <target>", Desc_d!"set the target",
@@ -217,14 +219,14 @@ else {
 
         mixin DEF_OPT!(
             "precision", int, "-p <dig>", Desc_d!"set the precision",
-            Range_d!(1, 6),
+            Range_d!(0, 12),
             Default_d!6
         );
 
         mixin DEF_OPT!(
             "span", int, "-s <len>", Desc_d!"set the span",
-            Range_d!(1, 6),
-            Default_d!6
+            Range_d!(1, 12),
+            Default_d!1
         );
 
         mixin CONFLICT_OPTS!(area, perim);
