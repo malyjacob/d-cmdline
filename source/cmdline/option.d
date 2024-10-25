@@ -69,7 +69,10 @@ enum Source {
 }
 
 package enum InnerType {
-    BOOL, INT, DOUBLE, STRING
+    BOOL,
+    INT,
+    DOUBLE,
+    STRING
 }
 
 /// the callback for parsing the `string` value to the target type
@@ -290,7 +293,7 @@ public:
                 }
             }
             if (signal)
-                error(format!"the implies key must be unique, here are keys: `%s`, key: `%s`"(
+                error(format("the implies key must be unique, here are keys: `%s`, key: `%s`",
                         implyMap.byKey.to!string, name));
             implyMap[name ~ ":" ~ bool.stringof] = true;
         }
@@ -311,7 +314,7 @@ public:
             }
         }
         if (signal)
-            error(format!"the implies key must be unique, here are keys: `%s`, key: `%s`"(
+            error(format("the implies key must be unique, here are keys: `%s`, key: `%s`",
                     implyMap.byKey.to!string, key));
         implyMap[key ~ ":" ~ T.stringof] = value;
         return this;
@@ -457,7 +460,7 @@ public:
         if (is_variadic) {
             auto derived = cast(VariadicOption!T) this;
             if (!derived) {
-                error(format!"the element type of the inner value of option `%s` is not `%s` in `Option.choices`"(
+                error(format("the element type of the inner value of option `%s` is not `%s` in `Option.choices`",
                         this.flags,
                         T.stringof
                 ));
@@ -467,7 +470,7 @@ public:
         else if (!this.isBoolean) {
             auto derived = cast(ValueOption!T) this;
             if (!derived) {
-                error(format!"the type of the inner value of option `%s` is not `%s` in `Option.choices"(
+                error(format("the type of the inner value of option `%s` is not `%s` in `Option.choices",
                         this.flags,
                         T.stringof
                 ));
@@ -475,7 +478,7 @@ public:
             return derived.choices(values);
         }
         else {
-            error(format!"connnot use `Option.choices` for option `%s` is bool option"(this.flags));
+            error(format("connnot use `Option.choices` for option `%s` is bool option", this.flags));
         }
         return this;
     }
@@ -503,7 +506,7 @@ public:
         if (is_variadic) {
             auto derived = cast(VariadicOption!T) this;
             if (!derived) {
-                error(format!"the element type of the inner value of option `%s` is not `%s` in `Option.rangeOf`"(
+                error(format("the element type of the inner value of option `%s` is not `%s` in `Option.rangeOf`",
                         this.flags,
                         T.stringof
                 ));
@@ -513,7 +516,7 @@ public:
         else {
             auto derived = cast(ValueOption!T) this;
             if (!derived) {
-                error(format!"the type of the inner value of option `%s` is not `%s` in `Option.rangeOf"(
+                error(format("the type of the inner value of option `%s` is not `%s` in `Option.rangeOf",
                         this.flags,
                         T.stringof
                 ));
@@ -527,7 +530,7 @@ public:
     Self defaultVal() {
         auto derived = cast(BoolOption) this;
         if (!derived) {
-            error(format!"connot cast the option `%s` to bool option using `Option.default()`"(
+            error(format("connot cast the option `%s` to bool option using `Option.default()`",
                     this.flags));
         }
         derived.defaultVal(true);
@@ -547,7 +550,8 @@ public:
         }
         if (!derived) {
             error(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     T.stringof, this.flags));
         }
         return derived.defaultVal(value);
@@ -563,7 +567,8 @@ public:
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
             error(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     T.stringof, this.flags));
         }
         return derived.defaultVal(value, rest);
@@ -591,7 +596,8 @@ package:
         }
         if (!derived) {
             parsingError(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     this.flags,
                     T.stringof));
         }
@@ -603,7 +609,8 @@ package:
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
             parsingError(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     this.flags,
                     T.stringof));
         }
@@ -612,7 +619,7 @@ package:
 
     Self configVal(T)(in T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            parsingError(format!"the values length cannot be zero in option `%s`"(this.flags));
+            parsingError(format("the values length cannot be zero in option `%s`", this.flags));
         }
         return configVal(values[0], cast(T[]) values[1 .. $]);
     }
@@ -635,7 +642,7 @@ package:
 
     Self implyVal(T)(T[] values) if (isBaseOptionValueType!T && !is(T == bool)) {
         if (!values.length) {
-            parsingError(format!"the values length cannot be zero in option `%s`"(this.flags));
+            parsingError(format("the values length cannot be zero in option `%s`", this.flags));
         }
         return implyVal(values[0], values[1 .. $]);
     }
@@ -670,7 +677,8 @@ public:
         auto derived = cast(ValueOption!T) this;
         if (!derived) {
             error(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     T.stringof, this.flags));
         }
         return derived.preset(value);
@@ -686,7 +694,8 @@ public:
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
             error(
-                format!"the value type is `%s` while the option `%s` inner type is not the type or related array type"(
+                format(
+                    "the value type is `%s` while the option `%s` inner type is not the type or related array type",
                     T.stringof, this.flags));
         }
         return derived.preset(value, rest);
@@ -715,7 +724,7 @@ public:
         if (derived_2) {
             return derived_2.get!T;
         }
-        error(format!"connot get the value of type `%s` from option `%s`"(
+        error(format("connot get the value of type `%s` from option `%s`",
                 T.stringof,
                 this.flags
         ));
@@ -727,7 +736,7 @@ public:
     T get(T : bool)() const {
         assert(!isValueData);
         if (isValueData) {
-            error(format!"connot get the value of type `%s` from option `%s`"(
+            error(format("connot get the value of type `%s` from option `%s`",
                     T.stringof,
                     this.flags
             ));
@@ -744,7 +753,7 @@ public:
         assert(isValueData);
         auto derived = cast(VariadicOption!Ele) this;
         if (!derived)
-            error(format!"connot get the value of type `%s` from option `%s`"(
+            error(format("connot get the value of type `%s` from option `%s`",
                     Ele.stringof,
                     this.flags
             ));
@@ -768,7 +777,7 @@ public:
             derived_2.parseFn = fn;
             return derived_2;
         }
-        error(format!"connot set the parser fn `%s` to option `%s`"(
+        error(format("connot set the parser fn `%s` to option `%s`",
                 typeof(fn)
                 .stringof,
                 this.flags
@@ -795,7 +804,7 @@ public:
             derived_2.processFn = fn;
             return derived_2;
         }
-        error(format!"connot set the processor fn `%s` to option `%s`"(
+        error(format("connot set the processor fn `%s` to option `%s`",
                 typeof(fn)
                 .stringof,
                 this.flags
@@ -815,7 +824,7 @@ public:
         static assert(isBaseOptionValueType!T && !is(T == bool));
         auto derived = cast(VariadicOption!T) this;
         if (!derived) {
-            error(format!"connot set the process reducer fn `%s` to option `%s`"(
+            error(format("connot set the process reducer fn `%s` to option `%s`",
                     typeof(fn)
                     .stringof,
                     this.flags
@@ -1000,11 +1009,11 @@ unittest {
     Option[] opts = [
         createOption!bool("-m, --mixed").defaultVal.implyVal(false),
         createOption!int("-m, --mixed [dig]", "")
-        .defaultVal.parser!((string v) => v.to!(int)).cliVal("123"),
+            .defaultVal.parser!((string v) => v.to!(int)).cliVal("123"),
         createOption!int("-m, --mixed <dig...>", "").defaultVal([123])
-        .parser!((string v) => v.to!(int))
-        .processor!((int a) => a + 1)
-        .cliVal("12", "13", "14")
+            .parser!((string v) => v.to!(int))
+            .processor!((int a) => a + 1)
+            .cliVal("12", "13", "14")
     ];
     opts[1].found = opts[2].found = true;
     opts.each!(v => v.initialize);
@@ -1046,7 +1055,7 @@ package class BoolOption : Option {
     override Self implyVal(OptionVariant value) {
         alias test_bool = visit!((bool v) => true, v => false);
         if (!test_bool(value))
-            parsingError(format!"the imply value must be a bool value in option %s"(this.flags));
+            parsingError(format("the imply value must be a bool value in option %s", this.flags));
         this.innerImplyData = value;
         return this;
     }
@@ -1071,7 +1080,7 @@ package class BoolOption : Option {
         if (this.settled)
             return this;
         if (!this.isValid) {
-            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+            parsingError(format("the option `%s` must valid before initializing", this.name));
         }
         this.settled = true;
         if (this.found) {
@@ -1162,8 +1171,8 @@ package class ValueOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
-        with(InnerType) {
-            mixin("this.innerType = "  ~ T.stringof.toUpper ~ ";");
+        with (InnerType) {
+            mixin("this.innerType = " ~ T.stringof.toUpper ~ ";");
         }
         if (this.isBoolean || this.variadic) {
             error(
@@ -1194,7 +1203,7 @@ package class ValueOption(T) : Option {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal in option `%s`, the values is: `%s`"(
+                    error(format("the element value of choices can not be equal in option `%s`, the values is: `%s`",
                             this.flags,
                             values.to!string));
                 }
@@ -1202,7 +1211,7 @@ package class ValueOption(T) : Option {
         }
         static if (is(T == int) || is(T == double)) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s in option `%s`, the values is: `%s`"(
+                error(format("the element value of choices cannot be out of %s in option `%s`, the values is: `%s`",
                         this.rangeOfStr(), this.flags, values.to!string
                 ));
             }
@@ -1214,7 +1223,7 @@ package class ValueOption(T) : Option {
     void _checkVal(in T value) const {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                parsingError(format("the value cannot be out of %s in option `%s`, the value is: `%s`",
                         this.choicesStr(),
                         this.flags,
                         value.to!string
@@ -1223,7 +1232,7 @@ package class ValueOption(T) : Option {
         }
         static if (is(T == int) || is(T == double)) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                parsingError(format("the value cannot be out of %s in option `%s`, the value is: `%s`",
                         this.rangeOfStr(),
                         this.flags,
                         value.to!string
@@ -1247,7 +1256,7 @@ package class ValueOption(T) : Option {
                 return this.choices(arr);
             }
             catch (ConvException e) {
-                error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                error(format("on option `%s` cannot convert the input `%s` to type `%s`",
                         this.name,
                         values.to!string,
                         T.stringof
@@ -1294,7 +1303,7 @@ package class ValueOption(T) : Option {
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T v) => true, v => false);
         if (!test_t(value)) {
-            parsingError(format!"the value type must be %s in option `%s`"(T.stringof, this.flags));
+            parsingError(format("the value type must be %s in option `%s`", T.stringof, this.flags));
         }
         _checkVal(value.get!T);
         this.innerImplyData = value;
@@ -1321,7 +1330,7 @@ package class ValueOption(T) : Option {
             this.cliArg = tmp;
         }
         catch (ConvException e) {
-            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+            parsingError(format("on option `%s` cannot convert the input `%s` to type `%s`",
                     this.name,
                     value,
                     T.stringof
@@ -1339,7 +1348,7 @@ package class ValueOption(T) : Option {
             this.envArg = tmp;
         }
         catch (ConvException e) {
-            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+            parsingError(format("on option `%s` cannot convert the input `%s` to type `%s`",
                     this.name,
                     this.envStr,
                     T.stringof
@@ -1376,7 +1385,7 @@ package class ValueOption(T) : Option {
         if (this.settled)
             return this;
         if (!this.isValid) {
-            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+            parsingError(format("the option `%s` must valid before initializing", this.name));
         }
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (v) => false);
@@ -1454,7 +1463,8 @@ package class ValueOption(T) : Option {
 
     override string typeStr() const {
         alias test_bool = visit!((bool v) => true, (const T v) => false);
-        return "type: " ~ (this.isOptional && test_bool(presetArg) ? T.stringof ~ "|true" : T.stringof);
+        return "type: " ~ (this.isOptional && test_bool(presetArg) ? T.stringof ~ "|true"
+                : T.stringof);
     }
 
     override string defaultValStr() const {
@@ -1524,8 +1534,8 @@ package class VariadicOption(T) : Option {
 
     this(string flags, string description) {
         super(flags, description);
-        with(InnerType) {
-            mixin("this.innerType = "  ~ T.stringof.toUpper ~ ";");
+        with (InnerType) {
+            mixin("this.innerType = " ~ T.stringof.toUpper ~ ";");
         }
         if (this.isBoolean || !this.variadic) {
             error(
@@ -1557,7 +1567,7 @@ package class VariadicOption(T) : Option {
         foreach (index_i, i; values) {
             foreach (j; values[index_i + 1 .. $]) {
                 if (i == j) {
-                    error(format!"the element value of choices can not be equal in option `%s`, the values is: `%s`"(
+                    error(format("the element value of choices can not be equal in option `%s`, the values is: `%s`",
                             this.flags,
                             values.to!string));
                 }
@@ -1565,7 +1575,7 @@ package class VariadicOption(T) : Option {
         }
         static if (is(T == int) || is(T == double)) {
             if (values.any!(val => val < this._min || val > this._max)) {
-                error(format!"the element value of choices cannot be out of %s in option `%s`, the values is: `%s`"(
+                error(format("the element value of choices cannot be out of %s in option `%s`, the values is: `%s`",
                         this.rangeOfStr(), this.flags, values.to!string
                 ));
             }
@@ -1577,7 +1587,7 @@ package class VariadicOption(T) : Option {
     void _checkVal_impl(in T value) const {
         if (!this.argChoices.empty) {
             if (!this.argChoices.count(value)) {
-                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                parsingError(format("the value cannot be out of %s in option `%s`, the value is: `%s`",
                         this.choicesStr(),
                         this.flags,
                         value.to!string
@@ -1586,7 +1596,7 @@ package class VariadicOption(T) : Option {
         }
         static if (is(T == int) || is(T == double)) {
             if (value < this._min || value > this._max) {
-                parsingError(format!"the value cannot be out of %s in option `%s`, the value is: `%s`"(
+                parsingError(format("the value cannot be out of %s in option `%s`, the value is: `%s`",
                         this.rangeOfStr(),
                         this.flags,
                         value.to!string
@@ -1624,7 +1634,7 @@ package class VariadicOption(T) : Option {
                 return this.choices(arr);
             }
             catch (ConvException e) {
-                error(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+                error(format("on option `%s` cannot convert the input `%s` to type `%s`",
                         this.name,
                         values.to!string,
                         T.stringof
@@ -1673,7 +1683,7 @@ package class VariadicOption(T) : Option {
     override Self implyVal(OptionVariant value) {
         alias test_t = visit!((T[] v) => true, (v) => false);
         if (!test_t(value)) {
-            parsingError(format!"the value type must be %s in option `%s`"((T[])
+            parsingError(format("the value type must be %s in option `%s`", (T[])
                     .stringof, this.flags));
         }
         _checkVal(value.get!(T[]));
@@ -1707,7 +1717,7 @@ package class VariadicOption(T) : Option {
                 this.cliArg = xtmp;
         }
         catch (ConvException e) {
-            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+            parsingError(format("on option `%s` cannot convert the input `%s` to type `%s`",
                     this.name,
                     ([value] ~ rest).to!string,
                     T.stringof
@@ -1727,7 +1737,7 @@ package class VariadicOption(T) : Option {
             this.envArg = tmp;
         }
         catch (ConvException e) {
-            parsingError(format!"on option `%s` cannot convert the input `%s` to type `%s`"(
+            parsingError(format("on option `%s` cannot convert the input `%s` to type `%s`",
                     this.name,
                     this.envStr,
                     T.stringof
@@ -1764,7 +1774,7 @@ package class VariadicOption(T) : Option {
         if (this.settled)
             return this;
         if (!this.isValid) {
-            parsingError(format!"the option `%s` must valid before initializing"(this.name));
+            parsingError(format("the option `%s` must valid before initializing", this.name));
         }
         this.settled = true;
         alias test_bool = visit!((bool v) => true, (v) => false);
@@ -1868,7 +1878,7 @@ package class VariadicOption(T) : Option {
         auto process_fn = this.processFn;
         auto reduce_fn = this.processReduceFn;
         if (!reduce_fn) {
-            error(format!"connot get `%s` value from option `%s`"(
+            error(format("connot get `%s` value from option `%s`",
                     U.stringof,
                     this.flags
             ));
@@ -2022,7 +2032,7 @@ package OptionFlags splitOptionFlags(string flags) {
     string short_flag = "", long_flag = "", value_flag = "";
     string[] flag_arr = flags.split(PTN_SP);
     if (flag_arr.length > 3)
-        error(format!"error type of flag `%s`"(flags));
+        error(format("error type of flag `%s`", flags));
     foreach (const ref string flag; flag_arr) {
         if (!matchAll(flag, PTN_SHORT).empty) {
             short_flag = flag;
