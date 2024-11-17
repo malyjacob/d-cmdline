@@ -31,25 +31,25 @@ void main(string[] argv) {
         .description("CLI to some string utilities")
         .setVersion("0.0.1");
 
-    Command str_split = program.command("split");
-    str_split.description("Split a string into substrings and display as an array.");
-    str_split.argument!string("<str>", "string to split");
-    str_split.option("-s, --seperator <char>", "separator character", ",");
-    str_split.action((opts, _str) {
-        string sp = opts("seperator").get!string;
-        string str = _str.get!string;
-        writeln(split(str, sp));
-    });
+    program.command("split")
+        .description("Split a string into substrings and display as an array.")
+        .argument!string("<str>", "string to split")
+        .option("-s, --seperator <char>", "separator character", ",")
+        .action((opts, _str) {
+            string sp = opts("seperator").get!string;
+            string str = _str.get!string;
+            writeln(split(str, sp));
+        });
 
-    Command join = program.command("join");
-    join.description("Join the command-arguments into a single string");
-    join.argument!string("<strs...>", "one or more string");
-    join.option("-s, --seperator <char>", "separator character", ",");
-    join.action((in OptsWrap opts, in ArgWrap _strs) {
-        string sp = opts("seperator").get!string;
-        auto strs = cast(string[]) _strs;
-        writeln(strs.join(sp));
-    });
+    program.command("join")
+        .description("Join the command-arguments into a single string")
+        .argument!string("<strs...>", "one or more string")
+        .option("-s, --seperator <char>", "separator character", ",")
+        .action((in OptsWrap opts, in ArgWrap _strs) {
+            string sp = opts("seperator").get!string;
+            auto strs = cast(string[]) _strs;
+            writeln(strs.join(sp));
+        });
 
     program.parse(argv);
 }
@@ -832,4 +832,4 @@ $ optx -r9 -ch -n1 -n 12 12
 
 ## Arguments
 
-....... **To Be Continued**
+....... **To Be Continued**.
